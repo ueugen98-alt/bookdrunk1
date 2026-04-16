@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, indexedDBLocalPersistence, initializeAuth } from "firebase/auth";
+import { getAuth, browserLocalPersistence, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -14,7 +14,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = initializeAuth(app, {
-  persistence: indexedDBLocalPersistence
+  persistence: browserLocalPersistence
 });
 
 export const db = getFirestore(app);
