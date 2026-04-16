@@ -50,8 +50,7 @@ function getCookie(n){return decodeURIComponent(document.cookie.split(';').map(c
 function deleteCookie(n){document.cookie=`${n}=;path=/;max-age=0`;}
 async function uploadToImgbb(file){const fd=new FormData();fd.append('image',file);const r=await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`,{method:'POST',body:fd});const d=await r.json();if(d.success)return d.data.url;throw new Error('Upload failed');}
 
-// Leaflet Map Component
-function LiveMap({ allUsers, currentUser, geo, onUserClick, onCheckin }) {
+function LiveMap({ allUsers, currentUser, geo, onUserClick }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef({});
@@ -60,7 +59,6 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick, onCheckin }) {
   const [showCheckin, setShowCheckin] = useState(false);
 
   useEffect(() => {
-    // Load Leaflet CSS
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
       link.id = 'leaflet-css';
@@ -68,7 +66,6 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick, onCheckin }) {
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
-    // Load Leaflet JS
     if (!window.L) {
       const script = document.createElement('script');
       script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
@@ -83,9 +80,7 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick, onCheckin }) {
     if (!leafletLoaded || !mapRef.current || mapInstanceRef.current) return;
     const center = geo ? [geo.lat, geo.lon] : [44.4268, 26.1025];
     const map = window.L.map(mapRef.current, { zoomControl: true, attributionControl: false }).setView(center, 13);
-    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-    }).addTo(map);
+    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
     mapInstanceRef.current = map;
   }, [leafletLoaded, geo]);
 
@@ -93,140 +88,76 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick, onCheckin }) {
     if (!mapInstanceRef.current || !window.L) return;
     const map = mapInstanceRef.current;
     const twoHoursAgo = Date.now() - 2*3600*1000;
-
-    // Clear old markers
     Object.values(markersRef.current).forEach(m => map.removeLayer(m));
     markersRef.current = {};
-
-    // Add markers for all users with location
     allUsers.filter(u => u.lat && u.lon).forEach(u => {
       const isActive = u.lastSeen?.seconds ? (u.lastSeen.seconds*1000 > twoHoursAgo) : false;
       const isMe = u.id === currentUser?.uid;
       const size = isMe ? 44 : isActive ? 38 : 32;
       const checkedIn = u.checkinName ? `<br/><span style="font-size:10px;color:#f5a623">📍 ${u.checkinName}</span>` : '';
-
       const icon = window.L.divIcon({
-        html: `<div style="
-          width:${size}px;height:${size}px;
-          border-radius:50%;
-          background:${isMe?'#f5a623':isActive?'#2a2a2a':'#1a1a1a'};
-          border:${isMe?'3px solid #fff':isActive?'2px solid #f5a623':'2px solid #444'};
-          display:flex;align-items:center;justify-content:center;
-          font-size:${isMe?22:isActive?18:16}px;
-          box-shadow:${isMe?'0 0 12px rgba(245,166,35,0.8)':isActive?'0 0 8px rgba(245,166,35,0.4)':'none'};
-          cursor:pointer;
-        ">${u.emoji}</div>`,
-        className: '',
-        iconSize: [size, size],
-        iconAnchor: [size/2, size/2],
+        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${isMe?'#f5a623':isActive?'#2a2a2a':'#1a1a1a'};border:${isMe?'3px solid #fff':isActive?'2px solid #f5a623':'2px solid #444'};display:flex;align-items:center;justify-content:center;font-size:${isMe?22:isActive?18:16}px;box-shadow:${isMe?'0 0 12px rgba(245,166,35,0.8)':isActive?'0 0 8px rgba(245,166,35,0.4)':'none'};cursor:pointer;">${u.emoji}</div>`,
+        className: '', iconSize: [size, size], iconAnchor: [size/2, size/2],
       });
-
-      const marker = window.L.marker([u.lat, u.lon], { icon })
-        .addTo(map)
-        .bindPopup(`
-          <div style="font-family:Georgia,serif;text-align:center;min-width:120px">
-            <div style="font-size:28px">${u.emoji}</div>
-            <div style="font-weight:700;color:#f5a623;font-size:14px">${u.name}</div>
-            <div style="color:#888;font-size:11px">${u.drink}</div>
-            ${checkedIn}
-            <div style="color:#aaa;font-size:10px;margin-top:4px">${isActive?'🟢 Activ recent':'⚫ Inactiv'}</div>
-            ${!isMe?`<button onclick="window._dbUserClick('${u.id}')" style="margin-top:8px;background:#f5a623;border:none;border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer;font-family:Georgia,serif">Vezi Profil</button>`:''}
-          </div>
-        `);
-
-      marker.on('click', () => {
-        if (!isMe) onUserClick(u);
-      });
-
+      const marker = window.L.marker([u.lat, u.lon], { icon }).addTo(map)
+        .bindPopup(`<div style="font-family:Georgia,serif;text-align:center;min-width:120px"><div style="font-size:28px">${u.emoji}</div><div style="font-weight:700;color:#f5a623;font-size:14px">${u.name}</div><div style="color:#888;font-size:11px">${u.drink}</div>${checkedIn}<div style="color:#aaa;font-size:10px;margin-top:4px">${isActive?'🟢 Activ recent':'⚫ Inactiv'}</div>${!isMe?`<button onclick="window._dbUserClick('${u.id}')" style="margin-top:8px;background:#f5a623;border:none;border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer;font-family:Georgia,serif">Vezi Profil</button>`:''}</div>`);
+      marker.on('click', () => { if (!isMe) onUserClick(u); });
       markersRef.current[u.id] = marker;
     });
-
-    // Global click handler for popup buttons
-    window._dbUserClick = (userId) => {
-      const user = allUsers.find(u => u.id === userId);
-      if (user) onUserClick(user);
-    };
+    window._dbUserClick = (userId) => { const user = allUsers.find(u => u.id === userId); if (user) onUserClick(user); };
   }, [allUsers, currentUser, leafletLoaded]);
 
-  // Center map on user location
-  useEffect(() => {
-    if (geo && mapInstanceRef.current) {
-      mapInstanceRef.current.setView([geo.lat, geo.lon], 14);
-    }
-  }, [geo]);
+  useEffect(() => { if (geo && mapInstanceRef.current) mapInstanceRef.current.setView([geo.lat, geo.lon], 14); }, [geo]);
 
   async function handleCheckin() {
     if (!checkinName.trim() || !currentUser) return;
-    await updateDoc(doc(db, "users", currentUser.uid), {
-      checkinName: checkinName,
-      checkinTime: serverTimestamp(),
-      lastSeen: serverTimestamp(),
-    });
-    setCheckinName("");
-    setShowCheckin(false);
+    await updateDoc(doc(db, "users", currentUser.uid), { checkinName, checkinTime: serverTimestamp(), lastSeen: serverTimestamp() });
+    setCheckinName(""); setShowCheckin(false);
   }
-
   async function handleCheckout() {
     if (!currentUser) return;
-    await updateDoc(doc(db, "users", currentUser.uid), {
-      checkinName: null,
-      checkinTime: null,
-    });
+    await updateDoc(doc(db, "users", currentUser.uid), { checkinName: null, checkinTime: null });
   }
 
   const myUser = allUsers.find(u => u.id === currentUser?.uid);
+  const inputS = {width:"100%",boxSizing:"border-box",background:"#1a1a1a",border:"1px solid #333",borderRadius:10,padding:"10px 14px",color:"#e8e0d0",fontSize:15,fontFamily:"Georgia,serif",outline:"none"};
 
   return (
     <div>
-      {/* Check-in bar */}
       <div style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:12,marginBottom:12}}>
         {myUser?.checkinName ? (
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:20}}>📍</span>
-            <div style={{flex:1}}>
-              <div style={{color:"#f5a623",fontWeight:700,fontSize:14}}>Check-in: {myUser.checkinName}</div>
-              <div style={{color:"#888",fontSize:12}}>Ești vizibil pe hartă</div>
-            </div>
+            <div style={{flex:1}}><div style={{color:"#f5a623",fontWeight:700,fontSize:14}}>Check-in: {myUser.checkinName}</div><div style={{color:"#888",fontSize:12}}>Ești vizibil pe hartă</div></div>
             <button style={{background:"#e87070",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif"}} onClick={handleCheckout}>Check-out</button>
           </div>
         ) : showCheckin ? (
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <input style={{...{width:"100%",boxSizing:"border-box",background:"#1a1a1a",border:"1px solid #333",borderRadius:10,padding:"10px 14px",color:"#e8e0d0",fontSize:15,fontFamily:"Georgia,serif",outline:"none"},flex:1,padding:"8px 12px"}} placeholder="Numele barului..." value={checkinName} onChange={e=>setCheckinName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleCheckin()} autoFocus/>
+            <input style={{...inputS,flex:1,padding:"8px 12px"}} placeholder="Numele barului..." value={checkinName} onChange={e=>setCheckinName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleCheckin()} autoFocus/>
             <button style={{background:"#f5a623",border:"none",borderRadius:8,padding:"8px 14px",color:"#111",fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif"}} onClick={handleCheckin}>✓</button>
             <button style={{background:"#2a2a2a",border:"none",borderRadius:8,padding:"8px 10px",color:"#888",cursor:"pointer"}} onClick={()=>setShowCheckin(false)}>✕</button>
           </div>
         ) : (
-          <button style={{background:"none",border:"1px dashed #444",borderRadius:10,padding:"10px",width:"100%",color:"#888",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>setShowCheckin(true)}>
-            📍 Check-in la un bar
-          </button>
+          <button style={{background:"none",border:"1px dashed #444",borderRadius:10,padding:"10px",width:"100%",color:"#888",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>setShowCheckin(true)}>📍 Check-in la un bar</button>
         )}
       </div>
-
-      {/* Map */}
       {!leafletLoaded && <div style={{height:400,background:"#171717",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center",color:"#888"}}>Se încarcă harta... 🗺️</div>}
       <div ref={mapRef} style={{height:420,borderRadius:14,overflow:"hidden",display:leafletLoaded?"block":"none"}}/>
-
-      {/* Legend */}
       <div style={{display:"flex",gap:12,marginTop:10,flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:6,color:"#888",fontSize:12}}><div style={{width:12,height:12,borderRadius:"50%",background:"#f5a623",border:"2px solid #fff"}}/> Tu</div>
         <div style={{display:"flex",alignItems:"center",gap:6,color:"#888",fontSize:12}}><div style={{width:12,height:12,borderRadius:"50%",background:"#2a2a2a",border:"2px solid #f5a623"}}/> Activ recent</div>
         <div style={{display:"flex",alignItems:"center",gap:6,color:"#888",fontSize:12}}><div style={{width:12,height:12,borderRadius:"50%",background:"#1a1a1a",border:"2px solid #444"}}/> Inactiv</div>
       </div>
-
-      {/* Active users list */}
       <div style={{marginTop:16}}>
-        <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
-          Pe Hartă ({allUsers.filter(u=>u.lat&&u.lon).length})
-        </div>
+        <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Pe Hartă ({allUsers.filter(u=>u.lat&&u.lon).length})</div>
         {allUsers.filter(u=>u.lat&&u.lon).map(u=>(
           <div key={u.id} style={{background:"#171717",border:"1px solid #242424",borderRadius:12,padding:10,marginBottom:8,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>onUserClick(u)}>
             <span style={{fontSize:24}}>{u.emoji}</span>
             <div style={{flex:1}}>
               <div style={{fontWeight:700,fontSize:14,color:u.id===currentUser?.uid?"#f5a623":"#e8e0d0"}}>{u.name} {u.id===currentUser?.uid&&"(tu)"}</div>
-              {u.checkinName&&<div style={{color:"#f5a623",fontSize:12}}>📍 {u.checkinName}</div>}
-              {!u.checkinName&&<div style={{color:"#666",fontSize:12}}>Locație activă</div>}
+              {u.checkinName?<div style={{color:"#f5a623",fontSize:12}}>📍 {u.checkinName}</div>:<div style={{color:"#666",fontSize:12}}>Locație activă</div>}
             </div>
-            {u.id!==currentUser?.uid&&<div style={{width:8,height:8,borderRadius:"50%",background: u.lastSeen?.seconds&&(Date.now()-u.lastSeen.seconds*1000)<7200000?"#4caf82":"#555"}}/>}
+            {u.id!==currentUser?.uid&&<div style={{width:8,height:8,borderRadius:"50%",background:u.lastSeen?.seconds&&(Date.now()-u.lastSeen.seconds*1000)<7200000?"#4caf82":"#555"}}/>}
           </div>
         ))}
         {allUsers.filter(u=>u.lat&&u.lon).length===0&&<div style={{textAlign:"center",color:"#666",fontSize:14,fontStyle:"italic",marginTop:20}}>Nimeni nu are locația activată încă.</div>}
@@ -273,9 +204,13 @@ export default function App() {
   const [newComment,setNewComment]=useState("");
   const [lightboxImg,setLightboxImg]=useState(null);
   const [badgeTooltip,setBadgeTooltip]=useState(null);
+  const [searchQuery,setSearchQuery]=useState("");
+  const [globalSearch,setGlobalSearch]=useState("");
+  const [showGlobalSearch,setShowGlobalSearch]=useState(false);
   const messagesEndRef=useRef(null);
   const commentInputRef=useRef(null);
   const fileInputRef=useRef(null);
+  const searchRef=useRef(null);
 
   useEffect(()=>{
     async function tryAutoLogin(){
@@ -328,7 +263,6 @@ export default function App() {
     return onSnapshot(q,snap=>{setComments(c=>({...c,[openComments]:snap.docs.map(d=>({id:d.id,...d.data()}))}));});
   },[openComments]);
 
-  // Update lastSeen periodically
   useEffect(()=>{
     if(!authUser||screen!=="app")return;
     const update=()=>updateDoc(doc(db,"users",authUser.uid),{lastSeen:serverTimestamp()}).catch(()=>{});
@@ -336,6 +270,10 @@ export default function App() {
     const interval=setInterval(update,5*60*1000);
     return()=>clearInterval(interval);
   },[authUser,screen]);
+
+  useEffect(()=>{
+    if(showGlobalSearch)setTimeout(()=>searchRef.current?.focus(),100);
+  },[showGlobalSearch]);
 
   function showToast(msg){setToast(msg);setTimeout(()=>setToast(null),2800);}
 
@@ -430,6 +368,19 @@ export default function App() {
   const myRank=leaderboard.findIndex(u=>u.id===authUser?.uid)+1;
   const nearbyUsers=allUsers.filter(u=>u.id!==authUser?.uid&&u.lat&&geo&&distKm(geo.lat,geo.lon,u.lat,u.lon)<=radius);
 
+  // Search results
+  const searchResults = globalSearch.trim() ? allUsers.filter(u=>
+    u.name?.toLowerCase().includes(globalSearch.toLowerCase()) ||
+    u.drink?.toLowerCase().includes(globalSearch.toLowerCase()) ||
+    u.bio?.toLowerCase().includes(globalSearch.toLowerCase())
+  ) : [];
+
+  const filteredUsers = allUsers.filter(u=>u.id!==authUser?.uid).filter(u=>
+    !searchQuery ||
+    u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    u.drink?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   if(screen==="splash")return(<div style={S.splash}><div style={S.splashGlow}/><div style={{textAlign:"center",zIndex:1}}><div style={{fontSize:72,marginBottom:12}}>🍺</div><div style={S.splashTitle}>DRUNKBOOK</div><div style={{color:"#888",fontSize:13,marginTop:8,letterSpacing:2}}>Rețeaua Socială a Celor Însetați</div><div style={S.splashLoader}><div style={S.splashBar}/></div></div></div>);
   if(loading)return(<div style={{...S.splash}}><div style={{fontSize:40}}>🍺</div><div style={{color:"#f5a623",marginTop:12}}>Se încarcă...</div></div>);
 
@@ -463,14 +414,44 @@ export default function App() {
       {lightboxImg&&(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setLightboxImg(null)}><img src={lightboxImg} alt="" style={{maxWidth:"95vw",maxHeight:"90vh",borderRadius:12,objectFit:"contain"}}/><button style={{position:"absolute",top:20,right:20,background:"#2a2a2a",border:"none",color:"#fff",width:36,height:36,borderRadius:"50%",fontSize:18,cursor:"pointer"}}>✕</button></div>)}
       {badgeTooltip&&(<div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"#1a1a1a",border:"1px solid #f5a623",borderRadius:16,padding:20,zIndex:400,textAlign:"center",minWidth:200}} onClick={()=>setBadgeTooltip(null)}><div style={{fontSize:48,marginBottom:8}}>{badgeTooltip.icon}</div><div style={{fontWeight:700,color:"#f5a623",fontSize:16,marginBottom:6}}>{badgeTooltip.name}</div><div style={{color:"#aaa",fontSize:13}}>{badgeTooltip.desc}</div><div style={{color:"#666",fontSize:11,marginTop:12}}>Apasă pentru a închide</div></div>)}
 
+      {/* Global Search Overlay */}
+      {showGlobalSearch&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:300,padding:20}} onClick={()=>{setShowGlobalSearch(false);setGlobalSearch("");}}>
+          <div onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",gap:10,marginBottom:16,marginTop:50}}>
+              <input ref={searchRef} style={{...S.input,flex:1,fontSize:18,padding:"14px 16px"}} placeholder="🔍 Caută useri..." value={globalSearch} onChange={e=>setGlobalSearch(e.target.value)} autoFocus/>
+              <button style={{background:"#2a2a2a",border:"none",borderRadius:10,padding:"14px 16px",color:"#888",cursor:"pointer",fontSize:16}} onClick={()=>{setShowGlobalSearch(false);setGlobalSearch("");}}>✕</button>
+            </div>
+            {globalSearch&&searchResults.length===0&&<div style={{textAlign:"center",color:"#666",fontSize:16,marginTop:40,fontStyle:"italic"}}>Niciun utilizator găsit 🍺</div>}
+            {searchResults.map(u=>(
+              <div key={u.id} style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:14,marginBottom:10,display:"flex",alignItems:"center",gap:12,cursor:"pointer"}} onClick={()=>{setViewProfile(u);setShowGlobalSearch(false);setGlobalSearch("");}}>
+                <span style={{fontSize:32}}>{u.emoji}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:16,color:"#f5a623"}}>{u.name}</div>
+                  <div style={{color:"#888",fontSize:13}}>{u.drink}</div>
+                  {u.bio&&<div style={{color:"#666",fontSize:12,marginTop:2,fontStyle:"italic"}}>{u.bio.slice(0,50)}{u.bio.length>50?"...":""}</div>}
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{color:"#f5a623",fontSize:13}}>{"★".repeat(Math.round(u.avgRating||0))}</div>
+                  <div style={{color:"#888",fontSize:11}}>{u.totalRatings||0} recenzii</div>
+                </div>
+              </div>
+            ))}
+            {!globalSearch&&<div style={{textAlign:"center",color:"#555",fontSize:14,marginTop:60,fontStyle:"italic"}}>Scrie un nume sau o băutură...</div>}
+          </div>
+        </div>
+      )}
+
       <div style={S.header}>
         <span style={{fontWeight:900,fontSize:18,letterSpacing:3,color:"#f5a623"}}>🍺 DRUNKBOOK</span>
-        <button style={S.avatarBtn} onClick={()=>setViewProfile({...profile,id:authUser.uid})}>{profile?.emoji}</button>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <button style={{background:"#1e1e1e",border:"1px solid #2a2a2a",borderRadius:"50%",width:38,height:38,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#888"}} onClick={()=>setShowGlobalSearch(true)}>🔍</button>
+          <button style={S.avatarBtn} onClick={()=>setViewProfile({...profile,id:authUser.uid})}>{profile?.emoji}</button>
+        </div>
       </div>
 
       <div style={S.content}>
 
-        {/* FEED */}
         {tab==="feed"&&(<div>
           <div style={S.composer}>
             <div style={{display:"flex",gap:10,marginBottom:10}}><span style={{fontSize:28}}>{profile?.emoji}</span><textarea style={S.composerInput} placeholder="Ce bei și ce gândești?" value={newPost} onChange={e=>setNewPost(e.target.value)} rows={2}/></div>
@@ -513,26 +494,16 @@ export default function App() {
           {posts.length===0&&<div style={S.emptyState}>🍺 Nicio postare încă.<br/>Fii primul care scrie ceva!</div>}
         </div>)}
 
-        {/* MAP */}
         {tab==="map"&&(<div>
-          {!geo&&(
-            <div style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:16,marginBottom:12,textAlign:"center"}}>
-              <div style={{fontSize:32,marginBottom:8}}>🗺️</div>
-              <div style={{color:"#e8e0d0",fontWeight:700,marginBottom:6}}>Activează locația ca să apari pe hartă</div>
-              <button style={S.geoBtn} onClick={requestGeo}>📍 Activează Locația</button>
-              {geoError&&<div style={{color:"#e87070",fontSize:13,marginTop:8}}>{geoError}</div>}
-            </div>
-          )}
-          <LiveMap
-            allUsers={allUsers}
-            currentUser={authUser}
-            geo={geo}
-            onUserClick={(u)=>setViewProfile(u)}
-            onCheckin={()=>{}}
-          />
+          {!geo&&(<div style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:16,marginBottom:12,textAlign:"center"}}>
+            <div style={{fontSize:32,marginBottom:8}}>🗺️</div>
+            <div style={{color:"#e8e0d0",fontWeight:700,marginBottom:6}}>Activează locația ca să apari pe hartă</div>
+            <button style={S.geoBtn} onClick={requestGeo}>📍 Activează Locația</button>
+            {geoError&&<div style={{color:"#e87070",fontSize:13,marginTop:8}}>{geoError}</div>}
+          </div>)}
+          <LiveMap allUsers={allUsers} currentUser={authUser} geo={geo} onUserClick={(u)=>setViewProfile(u)} onCheckin={()=>{}}/>
         </div>)}
 
-        {/* NEARBY */}
         {tab==="nearby"&&(<div>
           <div style={{marginBottom:16,display:"flex",flexDirection:"column",gap:10}}>
             {geo?<div style={{color:"#4caf82",fontSize:14,fontWeight:600}}>📍 Locație activă</div>:<button style={S.geoBtn} onClick={requestGeo}>📍 Activează Locația</button>}
@@ -557,7 +528,6 @@ export default function App() {
           </div>))}
         </div>)}
 
-        {/* LEADERBOARD */}
         {tab==="leaderboard"&&(<div>
           {myStats&&(<div style={{background:"linear-gradient(135deg,#1a1200,#2a2000)",border:"1px solid #f5a623",borderRadius:16,padding:16,marginBottom:20}}>
             <div style={{color:"#f5a623",fontSize:12,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Statisticile Tale</div>
@@ -572,9 +542,7 @@ export default function App() {
             <div style={{borderTop:"1px solid #333",paddingTop:12}}>
               <div style={{color:"#888",fontSize:12,marginBottom:8}}>Badge-urile tale:</div>
               {myStats.badges.length===0&&<div style={{color:"#555",fontSize:13,fontStyle:"italic"}}>Încă niciun badge. Fii mai activ! 🍺</div>}
-              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                {myStats.badges.map(bid=>{const b=BADGE_DEFS.find(x=>x.id===bid);if(!b)return null;return(<button key={bid} style={{background:"#1e1e1e",border:"1px solid #333",borderRadius:20,padding:"6px 12px",display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:"#e8e0d0",fontSize:13}} onClick={()=>setBadgeTooltip(b)}><span>{b.icon}</span><span>{b.name}</span></button>);})}
-              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>{myStats.badges.map(bid=>{const b=BADGE_DEFS.find(x=>x.id===bid);if(!b)return null;return(<button key={bid} style={{background:"#1e1e1e",border:"1px solid #333",borderRadius:20,padding:"6px 12px",display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:"#e8e0d0",fontSize:13}} onClick={()=>setBadgeTooltip(b)}><span>{b.icon}</span><span>{b.name}</span></button>);})}</div>
             </div>
           </div>)}
           <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>🏆 Clasament</div>
@@ -592,11 +560,21 @@ export default function App() {
           </div>
         </div>)}
 
-        {/* MESSAGES */}
         {tab==="messages"&&!chatWith&&(<div>
-          <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:16}}>Conversații</div>
+          <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Conversații</div>
           {conversations.map(conv=>{const otherId=conv.participants.find(p=>p!==authUser.uid);const otherName=conv.participantNames?.[otherId]||"Utilizator";const otherEmoji=conv.participantEmojis?.[otherId]||"🍺";const isUnread=conv.lastSenderId!==authUser.uid&&!(conv.readBy||[]).includes(authUser.uid);const otherUser=allUsers.find(u=>u.id===otherId);return(<div key={conv.id} style={{...S.postCard,cursor:"pointer",borderColor:isUnread?"#f5a623":"#242424"}} onClick={()=>otherUser&&setChatWith(otherUser)}><div style={{display:"flex",gap:12,alignItems:"center"}}><span style={{fontSize:32}}>{otherEmoji}</span><div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,color:isUnread?"#f5a623":"#e8e0d0"}}>{otherName}</div><div style={{color:"#888",fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{conv.lastMessage}</div></div><div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}><span style={{color:"#555",fontSize:11}}>{timeAgo(conv.lastMessageAt)}</span>{isUnread&&<span style={{background:"#f5a623",color:"#111",borderRadius:10,padding:"2px 7px",fontSize:11,fontWeight:700}}>nou</span>}</div></div></div>);})}
-          <div style={{marginTop:20}}><div style={{color:"#888",fontSize:13,marginBottom:10}}>Toți utilizatorii:</div>{allUsers.filter(u=>u.id!==authUser?.uid).map(u=>(<div key={u.id} style={{...S.nearbyCard,cursor:"pointer"}} onClick={()=>setChatWith(u)}><span style={{fontSize:28}}>{u.emoji}</span><div style={{flex:1}}><div style={{fontWeight:700,fontSize:14}}>{u.name}</div><div style={{color:"#888",fontSize:12}}>{u.drink}</div></div><button style={{...S.btnSmall,background:"#1a3a2a",color:"#4caf82",border:"1px solid #4caf82"}}>💬 Chat</button></div>))}</div>
+
+          {/* Search in messages */}
+          <div style={{marginTop:20}}>
+            <input style={{...S.input,marginBottom:12}} placeholder="🔍 Caută după nume sau băutură..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
+            <div style={{color:"#888",fontSize:13,marginBottom:10}}>{searchQuery?`Rezultate pentru "${searchQuery}":`:"Toți utilizatorii:"}</div>
+            {filteredUsers.map(u=>(<div key={u.id} style={{...S.nearbyCard,cursor:"pointer"}} onClick={()=>setChatWith(u)}>
+              <span style={{fontSize:28}}>{u.emoji}</span>
+              <div style={{flex:1}}><div style={{fontWeight:700,fontSize:14}}>{u.name}</div><div style={{color:"#888",fontSize:12}}>{u.drink}</div></div>
+              <button style={{...S.btnSmall,background:"#1a3a2a",color:"#4caf82",border:"1px solid #4caf82"}}>💬 Chat</button>
+            </div>))}
+            {filteredUsers.length===0&&<div style={{color:"#666",fontSize:14,fontStyle:"italic",textAlign:"center",marginTop:20}}>Niciun utilizator găsit 🍺</div>}
+          </div>
         </div>)}
 
         {tab==="messages"&&chatWith&&(<div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 140px)"}}>
@@ -619,15 +597,8 @@ export default function App() {
         {tab==="profile"&&profile&&(<ProfileView user={{...profile,id:authUser.uid}} posts={posts} allUsers={allUsers} isOwn={true} onSignOut={handleSignOut} onLightbox={setLightboxImg} onBadge={setBadgeTooltip} styles={S} timeAgo={timeAgo} getTitle={getTitle} computeBadges={computeBadges} BADGE_DEFS={BADGE_DEFS}/>)}
       </div>
 
-      {/* NAV - 6 tabs */}
       <div style={S.nav}>
-        {[
-          {key:"feed",icon:"🏠",label:"Feed"},
-          {key:"map",icon:"🗺️",label:"Hartă"},
-          {key:"leaderboard",icon:"🏆",label:"Top"},
-          {key:"messages",icon:"💬",label:"Mesaje",badge:unreadCount},
-          {key:"profile",icon:profile?.emoji,label:"Profil"},
-        ].map(t=>(
+        {[{key:"feed",icon:"🏠",label:"Feed"},{key:"map",icon:"🗺️",label:"Hartă"},{key:"leaderboard",icon:"🏆",label:"Top"},{key:"messages",icon:"💬",label:"Mesaje",badge:unreadCount},{key:"profile",icon:profile?.emoji,label:"Profil"}].map(t=>(
           <button key={t.key} style={{...S.navBtn,...(tab===t.key?S.navBtnActive:{})}} onClick={()=>{setTab(t.key);if(t.key!=="messages")setChatWith(null);setOpenComments(null);}}>
             <div style={{position:"relative",display:"inline-block"}}>
               <span style={{fontSize:20}}>{t.icon}</span>
