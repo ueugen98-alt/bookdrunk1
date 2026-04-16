@@ -8,16 +8,7 @@ import {
   doc, setDoc, getDoc, collection, addDoc, onSnapshot,
   query, orderBy, updateDoc, serverTimestamp, where
 } from "firebase/firestore";
-// Cookie helpers
-function setCookie(name, value, days=365){
-  document.cookie=`${name}=${value};path=/;max-age=${days*86400};SameSite=Lax`;
-}
-function getCookie(name){
-  return document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith(name+'='))?.split('=')[1]||null;
-}
-function deleteCookie(name){
-  document.cookie=`${name}=;path=/;max-age=0`;
-}
+
 const DRINKS = ["🍺","🍻","🥃","🍷","🍸","🍹","🥂","🍾"];
 const TITLES = ["Încă Sobru","Prima Bere","Al Doilea Rând","Vibe Check","Deja Fluent","Filozoful Barului","Regele Mesei","Legendă Vie"];
 
@@ -25,6 +16,9 @@ function getTitle(r){if(!r||r<1)return TITLES[0];if(r<2)return TITLES[1];if(r<3)
 function distKm(lat1,lon1,lat2,lon2){const R=6371,dLat=((lat2-lat1)*Math.PI)/180,dLon=((lon2-lon1)*Math.PI)/180,a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
 function timeAgo(ts){if(!ts)return "";const diff=Date.now()-(ts.seconds?ts.seconds*1000:ts);if(diff<60000)return "acum";if(diff<3600000)return Math.floor(diff/60000)+" min";if(diff<86400000)return Math.floor(diff/3600000)+"h";return Math.floor(diff/86400000)+"z";}
 function getChatId(a,b){return [a,b].sort().join("_");}
+function setCookie(n,v,d=365){document.cookie=`${n}=${encodeURIComponent(v)};path=/;max-age=${d*86400};SameSite=Lax`;}
+function getCookie(n){return decodeURIComponent(document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith(n+'='))?.split('=')[1]||'');}
+function deleteCookie(n){document.cookie=`${n}=;path=/;max-age=0`;}
 
 export default function App() {
   const [authUser,setAuthUser]=useState(null);
@@ -62,53 +56,36 @@ export default function App() {
   const messagesEndRef=useRef(null);
   const commentInputRef=useRef(null);
 
-  useEffect(()=>{const t=setTimeout(()=>setScreen("auth"),2200);return()=>clearTimeout(t);},[]);
-// Check if already logged in on mount
-useEffect(()=>{
+  // Auto-login on mount
+  useEffect(()=>{
     async function tryAutoLogin(){
-      // Try Firebase current user first
-      if(auth.currentUser){
-        const snap=await getDoc(doc(db,"users",auth.currentUser.uid));
-        if(snap.exists()){setProfile(snap.data());setScreen("app");setLoading(false);return;}
-      }
-      // Try cookie re-login
-      const savedEmail=getCookie('db_email');
-      const savedPass=getCookie('db_pass');
-      if(savedEmail&&savedPass){
-        try{
-          const cred=await signInWithEmailAndPassword(auth,savedEmail,savedPass);
-          const snap=await getDoc(doc(db,"users",cred.user.uid));
-          if(snap.exists()){setProfile(snap.data());setScreen("app");}
-          else{setScreen("setup");}
-        }catch(e){
-          deleteCookie('db_email');
-          deleteCookie('db_pass');
+      try{
+        if(auth.currentUser){
+          const snap=await getDoc(doc(db,"users",auth.currentUser.uid));
+          if(snap.exists()){setProfile(snap.data());setAuthUser(auth.currentUser);setScreen("app");setLoading(false);return;}
+        }
+        const savedEmail=getCookie('db_email');
+        const savedPass=getCookie('db_pass');
+        if(savedEmail&&savedPass){
+          try{
+            const cred=await signInWithEmailAndPassword(auth,savedEmail,savedPass);
+            const snap=await getDoc(doc(db,"users",cred.user.uid));
+            setAuthUser(cred.user);
+            if(snap.exists()){setProfile(snap.data());setScreen("app");}
+            else{setScreen("setup");setSetupStep(0);}
+          }catch(e){
+            deleteCookie('db_email');deleteCookie('db_pass');
+            setScreen("auth");
+          }
+        } else {
           setScreen("auth");
         }
-      }
+      }catch(e){setScreen("auth");}
       setLoading(false);
     }
-    tryAutoLogin();
+    setTimeout(()=>tryAutoLogin(), 2200);
   },[]);
-  useEffect(()=>{
-    const unsub=onAuthStateChanged(auth,async(user)=>{
-      try {
-        setAuthUser(user);
-        if(user){
-          const snap=await getDoc(doc(db,"users",user.uid));
-          if(snap.exists()){setProfile(snap.data());setScreen("app");}
-          else{setScreen("setup");setSetupStep(0);}
-        }else{setProfile(null);setScreen("auth");}
-      } catch(e) {
-        console.error("Auth error:", e);
-        setProfile(null);
-        setScreen("auth");
-      } finally {
-        setLoading(false);
-      }
-    });
-    return unsub;
-  },[]);
+
   useEffect(()=>{
     if(screen!=="app")return;
     const q=query(collection(db,"posts"),orderBy("createdAt","desc"));
@@ -153,7 +130,7 @@ useEffect(()=>{
 
   function showToast(msg){setToast(msg);setTimeout(()=>setToast(null),2800);}
 
- async function handleAuth(){
+  async function handleAuth(){
     setAuthError("");
     try{
       let user;
@@ -164,8 +141,9 @@ useEffect(()=>{
         const cred=await signInWithEmailAndPassword(auth,email,password);
         user=cred.user;
       }
-      setCookie('db_email', email);
-      setCookie('db_pass', password);
+      setCookie('db_email',email);
+      setCookie('db_pass',password);
+      setAuthUser(user);
       const snap=await getDoc(doc(db,"users",user.uid));
       if(snap.exists()){setProfile(snap.data());setScreen("app");}
       else{setScreen("setup");setSetupStep(0);}
@@ -205,10 +183,7 @@ useEffect(()=>{
 
   async function submitComment(postId){
     if(!newComment.trim())return;
-    await addDoc(collection(db,"posts",postId,"comments"),{
-      userId:authUser.uid,userName:profile.name,userEmoji:profile.emoji,
-      text:newComment,createdAt:serverTimestamp(),
-    });
+    await addDoc(collection(db,"posts",postId,"comments"),{userId:authUser.uid,userName:profile.name,userEmoji:profile.emoji,text:newComment,createdAt:serverTimestamp()});
     await updateDoc(doc(db,"posts",postId),{commentCount:(posts.find(p=>p.id===postId)?.commentCount||0)+1});
     setNewComment("");showToast("Comentariu adăugat! 💬");
   }
@@ -231,6 +206,15 @@ useEffect(()=>{
   }
 
   function openChat(user){setChatWith(user);setViewProfile(null);setTab("messages");}
+
+  async function handleSignOut(){
+    deleteCookie('db_email');
+    deleteCookie('db_pass');
+    await signOut(auth);
+    setScreen("auth");
+    setProfile(null);
+    setAuthUser(null);
+  }
 
   const nearbyUsers=allUsers.filter(u=>u.id!==authUser?.uid&&u.lat&&geo&&distKm(geo.lat,geo.lon,u.lat,u.lon)<=radius);
 
@@ -300,22 +284,17 @@ useEffect(()=>{
               <div style={{fontSize:15,lineHeight:1.6,color:"#ddd",marginBottom:12}}>{post.text}</div>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
                 <button style={S.likeBtn} onClick={()=>toggleLike(post.id,post.likes||[])}>🍻 {(post.likes||[]).length}{(post.likes||[]).includes(authUser.uid)?" · cheers!":""}</button>
-                <button style={{...S.likeBtn,color:openComments===post.id?"#f5a623":"#ccc",borderColor:openComments===post.id?"#f5a623":"#2a2a2a"}}
-                  onClick={()=>{setOpenComments(openComments===post.id?null:post.id);setNewComment("");setTimeout(()=>commentInputRef.current?.focus(),200);}}>
-                  💬 {post.commentCount||0}
-                </button>
+                <button style={{...S.likeBtn,color:openComments===post.id?"#f5a623":"#ccc",borderColor:openComments===post.id?"#f5a623":"#2a2a2a"}} onClick={()=>{setOpenComments(openComments===post.id?null:post.id);setNewComment("");setTimeout(()=>commentInputRef.current?.focus(),200);}}>💬 {post.commentCount||0}</button>
               </div>
               {openComments===post.id&&(
                 <div style={{marginTop:12,borderTop:"1px solid #242424",paddingTop:12}}>
-                  {(comments[post.id]||[]).map(c=>(
-                    <div key={c.id} style={{display:"flex",gap:8,marginBottom:10}}>
-                      <span style={{fontSize:20,flexShrink:0}}>{c.userEmoji}</span>
-                      <div style={{background:"#1e1e1e",borderRadius:"4px 12px 12px 12px",padding:"8px 12px",flex:1}}>
-                        <div style={{fontWeight:700,fontSize:12,color:"#f5a623",marginBottom:3}}>{c.userName} <span style={{color:"#555",fontWeight:400}}>· {timeAgo(c.createdAt)}</span></div>
-                        <div style={{fontSize:14,color:"#ddd",lineHeight:1.5}}>{c.text}</div>
-                      </div>
+                  {(comments[post.id]||[]).map(c=>(<div key={c.id} style={{display:"flex",gap:8,marginBottom:10}}>
+                    <span style={{fontSize:20,flexShrink:0}}>{c.userEmoji}</span>
+                    <div style={{background:"#1e1e1e",borderRadius:"4px 12px 12px 12px",padding:"8px 12px",flex:1}}>
+                      <div style={{fontWeight:700,fontSize:12,color:"#f5a623",marginBottom:3}}>{c.userName} <span style={{color:"#555",fontWeight:400}}>· {timeAgo(c.createdAt)}</span></div>
+                      <div style={{fontSize:14,color:"#ddd",lineHeight:1.5}}>{c.text}</div>
                     </div>
-                  ))}
+                  </div>))}
                   {(comments[post.id]||[]).length===0&&<div style={{color:"#555",fontSize:13,fontStyle:"italic",marginBottom:10}}>Fii primul care comentează! 🍺</div>}
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
                     <span style={{fontSize:22}}>{profile?.emoji}</span>
@@ -411,7 +390,7 @@ useEffect(()=>{
           </div>
         </div>)}
 
-        {tab==="profile"&&profile&&(<ProfileView user={{...profile,id:authUser.uid}} posts={posts} isOwn={true} onSignOut={async()=>{await signOut(auth);setScreen("auth");setProfile(null);}} styles={S} timeAgo={timeAgo} getTitle={getTitle}/>)}
+        {tab==="profile"&&profile&&(<ProfileView user={{...profile,id:authUser.uid}} posts={posts} isOwn={true} onSignOut={handleSignOut} styles={S} timeAgo={timeAgo} getTitle={getTitle}/>)}
       </div>
 
       <div style={S.nav}>
