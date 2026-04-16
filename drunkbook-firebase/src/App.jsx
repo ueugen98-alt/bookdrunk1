@@ -8,7 +8,16 @@ import {
   doc, setDoc, getDoc, collection, addDoc, onSnapshot,
   query, orderBy, updateDoc, serverTimestamp, where
 } from "firebase/firestore";
-
+// Cookie helpers
+function setCookie(name, value, days=365){
+  document.cookie=`${name}=${value};path=/;max-age=${days*86400};SameSite=Lax`;
+}
+function getCookie(name){
+  return document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith(name+'='))?.split('=')[1]||null;
+}
+function deleteCookie(name){
+  document.cookie=`${name}=;path=/;max-age=0`;
+}
 const DRINKS = ["🍺","🍻","🥃","🍷","🍸","🍹","🥂","🍾"];
 const TITLES = ["Încă Sobru","Prima Bere","Al Doilea Rând","Vibe Check","Deja Fluent","Filozoful Barului","Regele Mesei","Legendă Vie"];
 
@@ -56,13 +65,30 @@ export default function App() {
   useEffect(()=>{const t=setTimeout(()=>setScreen("auth"),2200);return()=>clearTimeout(t);},[]);
 // Check if already logged in on mount
 useEffect(()=>{
-    if(auth.currentUser){
-      getDoc(doc(db,"users",auth.currentUser.uid)).then(snap=>{
-        if(snap.exists()){setProfile(snap.data());setScreen("app");}
-        else{setScreen("setup");}
-        setLoading(false);
-      });
+    async function tryAutoLogin(){
+      // Try Firebase current user first
+      if(auth.currentUser){
+        const snap=await getDoc(doc(db,"users",auth.currentUser.uid));
+        if(snap.exists()){setProfile(snap.data());setScreen("app");setLoading(false);return;}
+      }
+      // Try cookie re-login
+      const savedEmail=getCookie('db_email');
+      const savedPass=getCookie('db_pass');
+      if(savedEmail&&savedPass){
+        try{
+          const cred=await signInWithEmailAndPassword(auth,savedEmail,savedPass);
+          const snap=await getDoc(doc(db,"users",cred.user.uid));
+          if(snap.exists()){setProfile(snap.data());setScreen("app");}
+          else{setScreen("setup");}
+        }catch(e){
+          deleteCookie('db_email');
+          deleteCookie('db_pass');
+          setScreen("auth");
+        }
+      }
+      setLoading(false);
     }
+    tryAutoLogin();
   },[]);
   useEffect(()=>{
     const unsub=onAuthStateChanged(auth,async(user)=>{
@@ -132,14 +158,15 @@ useEffect(()=>{
     try{
       let user;
       if(authMode==="register"){
-        const cred = await createUserWithEmailAndPassword(auth,email,password);
-        user = cred.user;
-      } else {
-        const cred = await signInWithEmailAndPassword(auth,email,password);
-        user = cred.user;
+        const cred=await createUserWithEmailAndPassword(auth,email,password);
+        user=cred.user;
+      }else{
+        const cred=await signInWithEmailAndPassword(auth,email,password);
+        user=cred.user;
       }
-      // Manual redirect after login
-      const snap = await getDoc(doc(db,"users",user.uid));
+      setCookie('db_email', email);
+      setCookie('db_pass', password);
+      const snap=await getDoc(doc(db,"users",user.uid));
       if(snap.exists()){setProfile(snap.data());setScreen("app");}
       else{setScreen("setup");setSetupStep(0);}
     }catch(e){
