@@ -65,30 +65,24 @@ function getCookie(n){return decodeURIComponent(document.cookie.split(';').map(c
 function deleteCookie(n){document.cookie=`${n}=;path=/;max-age=0`;}
 async function uploadToImgbb(file){const fd=new FormData();fd.append('image',file);const r=await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`,{method:'POST',body:fd});const d=await r.json();if(d.success)return d.data.url;throw new Error('Upload failed');}
 
-// ===== SPIN THE BOTTLE COMPONENT =====
-function SpinBottle({ allUsers, currentUser, onSpun, profile }) {
+function SpinBottle({ allUsers, currentUser, onSpun }) {
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [selected, setSelected] = useState(null);
   const [showResult, setShowResult] = useState(false);
-
   const others = allUsers.filter(u => u.id !== currentUser?.uid);
 
   async function spin() {
     if (spinning || others.length === 0) return;
-    setSpinning(true);
-    setSelected(null);
-    setShowResult(false);
+    setSpinning(true); setSelected(null); setShowResult(false);
     const extraSpins = 5 + Math.floor(Math.random() * 5);
     const targetIndex = Math.floor(Math.random() * others.length);
     const degreesPerUser = 360 / others.length;
     const finalAngle = extraSpins * 360 + targetIndex * degreesPerUser + Math.random() * degreesPerUser;
     setRotation(prev => prev + finalAngle);
-    setTimeout(async () => {
+    setTimeout(() => {
       const winner = others[targetIndex];
-      setSelected(winner);
-      setSpinning(false);
-      setShowResult(true);
+      setSelected(winner); setSpinning(false); setShowResult(true);
       if (onSpun) onSpun(winner);
     }, 3000);
   }
@@ -96,46 +90,27 @@ function SpinBottle({ allUsers, currentUser, onSpun, profile }) {
   return (
     <div style={{textAlign:"center",padding:"20px 0"}}>
       <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:20}}>🍾 Spin the Bottle</div>
-
       {others.length < 2 ? (
-        <div style={{color:"#888",fontSize:14,fontStyle:"italic",padding:20}}>Trebuie să fie cel puțin 2 utilizatori în aplicație pentru Spin the Bottle!</div>
+        <div style={{color:"#888",fontSize:14,fontStyle:"italic",padding:20}}>Trebuie să fie cel puțin 2 utilizatori!</div>
       ) : (
         <>
-          {/* Bottle */}
           <div style={{position:"relative",width:200,height:200,margin:"0 auto 20px"}}>
-            {/* Users around circle */}
             {others.slice(0,8).map((u,i) => {
               const angle = (i / Math.min(others.length,8)) * 2 * Math.PI - Math.PI/2;
               const x = 90 + 80 * Math.cos(angle);
               const y = 90 + 80 * Math.sin(angle);
-              return (
-                <div key={u.id} style={{position:"absolute",left:x,top:y,transform:"translate(-50%,-50%)",fontSize:24,transition:"all 0.3s",opacity:selected&&selected.id===u.id?1:selected?0.3:1}}>
-                  {u.emoji}
-                </div>
-              );
+              return (<div key={u.id} style={{position:"absolute",left:x,top:y,transform:"translate(-50%,-50%)",fontSize:24,opacity:selected&&selected.id===u.id?1:selected?0.3:1}}>{u.emoji}</div>);
             })}
-            {/* Bottle pointer */}
-            <div style={{position:"absolute",top:"50%",left:"50%",transform:`translate(-50%,-50%) rotate(${rotation}deg)`,transformOrigin:"center bottom",transition:spinning?"transform 3s cubic-bezier(0.2,0.8,0.4,1)":"none",fontSize:48,lineHeight:1}}>
-              🍾
-            </div>
-            {/* Center dot */}
+            <div style={{position:"absolute",top:"50%",left:"50%",transform:`translate(-50%,-50%) rotate(${rotation}deg)`,transformOrigin:"center bottom",transition:spinning?"transform 3s cubic-bezier(0.2,0.8,0.4,1)":"none",fontSize:48,lineHeight:1}}>🍾</div>
             <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:12,height:12,borderRadius:"50%",background:"#f5a623",zIndex:2}}/>
           </div>
-
-          <button
-            style={{background:spinning?"#333":"linear-gradient(135deg,#f5a623,#e8890a)",border:"none",borderRadius:50,padding:"14px 40px",color:spinning?"#888":"#111",fontWeight:800,fontSize:18,cursor:spinning?"not-allowed":"pointer",fontFamily:"Georgia,serif",transition:"all 0.3s",boxShadow:spinning?"none":"0 4px 20px rgba(245,166,35,0.4)"}}
-            onClick={spin} disabled={spinning}>
-            {spinning?"Se rotește...":"🍾 Rotește Sticla!"}
-          </button>
-
+          <button style={{background:spinning?"#333":"linear-gradient(135deg,#f5a623,#e8890a)",border:"none",borderRadius:50,padding:"14px 40px",color:spinning?"#888":"#111",fontWeight:800,fontSize:18,cursor:spinning?"not-allowed":"pointer",fontFamily:"Georgia,serif",boxShadow:spinning?"none":"0 4px 20px rgba(245,166,35,0.4)"}} onClick={spin} disabled={spinning}>{spinning?"Se rotește...":"🍾 Rotește Sticla!"}</button>
           {showResult && selected && (
-            <div style={{marginTop:20,background:"linear-gradient(135deg,#1a1200,#2a2000)",border:"1px solid #f5a623",borderRadius:16,padding:20,animation:"fadeIn 0.5s ease"}}>
+            <div style={{marginTop:20,background:"linear-gradient(135deg,#1a1200,#2a2000)",border:"1px solid #f5a623",borderRadius:16,padding:20}}>
               <div style={{fontSize:48,marginBottom:8}}>{selected.emoji}</div>
               <div style={{fontWeight:800,fontSize:20,color:"#f5a623",marginBottom:4}}>🍾 {selected.name}</div>
               <div style={{color:"#888",fontSize:13,marginBottom:16}}>a fost ales de sticlă!</div>
-              <div style={{display:"flex",gap:8,justifyContent:"center"}}>
-                <button style={{background:"#f5a623",border:"none",borderRadius:10,padding:"10px 20px",color:"#111",fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif"}} onClick={()=>{setShowResult(false);setSelected(null);}}>Rotește din nou</button>
-              </div>
+              <button style={{background:"#f5a623",border:"none",borderRadius:10,padding:"10px 20px",color:"#111",fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif"}} onClick={()=>{setShowResult(false);setSelected(null);}}>Rotește din nou</button>
             </div>
           )}
         </>
@@ -144,7 +119,6 @@ function SpinBottle({ allUsers, currentUser, onSpun, profile }) {
   );
 }
 
-// ===== LIVE MAP COMPONENT =====
 function LiveMap({ allUsers, currentUser, geo, onUserClick }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -303,12 +277,11 @@ export default function App() {
   const [editProfile,setEditProfile]=useState(false);
   const [editData,setEditData]=useState({name:"",emoji:"🍺",drink:"",bio:""});
   const [savingProfile,setSavingProfile]=useState(false);
-  // Challenges
   const [challenges,setChallenges]=useState([]);
   const [showChallengeModal,setShowChallengeModal]=useState(false);
   const [challengeTarget,setChallengeTarget]=useState(null);
   const [challengeText,setChallengeText]=useState("");
-  const [funTab,setFunTab]=useState("challenges"); // challenges | spin
+  const [funTab,setFunTab]=useState("challenges");
   const [pendingChallenges,setPendingChallenges]=useState(0);
   const messagesEndRef=useRef(null);
   const commentInputRef=useRef(null);
@@ -372,7 +345,6 @@ export default function App() {
     update(); const interval=setInterval(update,5*60*1000); return()=>clearInterval(interval);
   },[authUser,screen]);
 
-  // Listen to challenges
   useEffect(()=>{
     if(!authUser||screen!=="app")return;
     const q=query(collection(db,"challenges"),orderBy("createdAt","desc"));
@@ -475,34 +447,25 @@ export default function App() {
     setEditProfile(true);
   }
 
-  // Challenge functions
   async function sendChallenge(){
     if(!challengeText.trim()||!challengeTarget)return;
-    await addDoc(collection(db,"challenges"),{
-      fromId:authUser.uid,fromName:profile.name,fromEmoji:profile.emoji,
-      toId:challengeTarget.id,toName:challengeTarget.name,toEmoji:challengeTarget.emoji,
-      text:challengeText,status:"pending",createdAt:serverTimestamp(),
-    });
+    await addDoc(collection(db,"challenges"),{fromId:authUser.uid,fromName:profile.name,fromEmoji:profile.emoji,toId:challengeTarget.id,toName:challengeTarget.name,toEmoji:challengeTarget.emoji,text:challengeText,status:"pending",createdAt:serverTimestamp()});
     setShowChallengeModal(false);setChallengeText("");setChallengeTarget(null);
     showToast(`Provocare trimisă lui ${challengeTarget.name}! 🎯`);
   }
 
   async function respondChallenge(challengeId,accept){
-    await updateDoc(doc(db,"challenges",challengeId),{
-      status:accept?"accepted":"declined",respondedAt:serverTimestamp(),
-    });
+    await updateDoc(doc(db,"challenges",challengeId),{status:accept?"accepted":"declined",respondedAt:serverTimestamp()});
     if(accept){
       await updateDoc(doc(db,"users",authUser.uid),{challengesAccepted:(profile.challengesAccepted||0)+1});
       setProfile(p=>({...p,challengesAccepted:(p.challengesAccepted||0)+1}));
       showToast("Provocare acceptată! 💪🔥");
-    }else{
-      showToast("Provocare refuzată!");
-    }
+    }else{showToast("Provocare refuzată!");}
   }
 
   async function completeChallenge(challengeId){
     await updateDoc(doc(db,"challenges",challengeId),{status:"completed",completedAt:serverTimestamp()});
-    showToast("Provocare completată! 🏆+5 puncte");
+    showToast("Provocare completată! 🏆 +5 puncte");
   }
 
   function openChat(user){setChatWith(user);setViewProfile(null);setTab("messages");}
@@ -524,7 +487,6 @@ export default function App() {
   const nearbyUsers=allUsers.filter(u=>u.id!==authUser?.uid&&u.lat&&geo&&distKm(geo.lat,geo.lon,u.lat,u.lon)<=radius);
   const searchResults=globalSearch.trim()?allUsers.filter(u=>u.name?.toLowerCase().includes(globalSearch.toLowerCase())||u.drink?.toLowerCase().includes(globalSearch.toLowerCase())||u.bio?.toLowerCase().includes(globalSearch.toLowerCase())):[];
   const filteredUsers=allUsers.filter(u=>u.id!==authUser?.uid).filter(u=>!searchQuery||u.name?.toLowerCase().includes(searchQuery.toLowerCase())||u.drink?.toLowerCase().includes(searchQuery.toLowerCase()));
-
   const myChallenges=challenges.filter(c=>c.fromId===authUser?.uid||c.toId===authUser?.uid);
 
   if(screen==="splash")return(<div style={S.splash}><div style={S.splashGlow}/><div style={{textAlign:"center",zIndex:1}}><div style={{fontSize:72,marginBottom:12}}>🍺</div><div style={S.splashTitle}>DRUNKBOOK</div><div style={{color:"#888",fontSize:13,marginTop:8,letterSpacing:2}}>Rețeaua Socială a Celor Însetați</div><div style={S.splashLoader}><div style={S.splashBar}/></div></div></div>);
@@ -560,18 +522,16 @@ export default function App() {
       {lightboxImg&&(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setLightboxImg(null)}><img src={lightboxImg} alt="" style={{maxWidth:"95vw",maxHeight:"90vh",borderRadius:12,objectFit:"contain"}}/><button style={{position:"absolute",top:20,right:20,background:"#2a2a2a",border:"none",color:"#fff",width:36,height:36,borderRadius:"50%",fontSize:18,cursor:"pointer"}}>✕</button></div>)}
       {badgeTooltip&&(<div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"#1a1a1a",border:"1px solid #f5a623",borderRadius:16,padding:20,zIndex:400,textAlign:"center",minWidth:200}} onClick={()=>setBadgeTooltip(null)}><div style={{fontSize:48,marginBottom:8}}>{badgeTooltip.icon}</div><div style={{fontWeight:700,color:"#f5a623",fontSize:16,marginBottom:6}}>{badgeTooltip.name}</div><div style={{color:"#aaa",fontSize:13}}>{badgeTooltip.desc}</div><div style={{color:"#666",fontSize:11,marginTop:12}}>Apasă pentru a închide</div></div>)}
 
-      {/* Edit Profile */}
       {editProfile&&(<div style={S.modal} onClick={()=>setEditProfile(false)}><div style={S.modalBox} onClick={e=>e.stopPropagation()}>
         <button style={S.modalClose} onClick={()=>setEditProfile(false)}>✕</button>
         <div style={{fontSize:18,fontWeight:700,color:"#f5a623",marginBottom:20,textAlign:"center"}}>✏️ Editează Profilul</div>
         <div style={{marginBottom:14}}><div style={{color:"#888",fontSize:12,marginBottom:6}}>Emoji</div><div style={S.emojiGrid}>{DRINKS.map(e=><button key={e} style={{...S.emojiBtn,...(editData.emoji===e?S.emojiBtnActive:{})}} onClick={()=>setEditData(d=>({...d,emoji:e}))}>{e}</button>)}</div></div>
-        <div style={{marginBottom:14}}><div style={{color:"#888",fontSize:12,marginBottom:6}}>Nume</div><input style={S.input} placeholder="Numele tău de bar..." value={editData.name} onChange={e=>setEditData(d=>({...d,name:e.target.value}))}/></div>
-        <div style={{marginBottom:14}}><div style={{color:"#888",fontSize:12,marginBottom:6}}>Băutura favorită</div><input style={S.input} placeholder="ex: Bere, Whisky..." value={editData.drink} onChange={e=>setEditData(d=>({...d,drink:e.target.value}))}/></div>
-        <div style={{marginBottom:20}}><div style={{color:"#888",fontSize:12,marginBottom:6}}>Bio</div><textarea style={{...S.input,height:90,resize:"none"}} placeholder="Spune ceva despre tine..." value={editData.bio} onChange={e=>setEditData(d=>({...d,bio:e.target.value}))}/></div>
+        <div style={{marginBottom:14}}><div style={{color:"#888",fontSize:12,marginBottom:6}}>Nume</div><input style={S.input} value={editData.name} onChange={e=>setEditData(d=>({...d,name:e.target.value}))}/></div>
+        <div style={{marginBottom:14}}><div style={{color:"#888",fontSize:12,marginBottom:6}}>Băutura favorită</div><input style={S.input} value={editData.drink} onChange={e=>setEditData(d=>({...d,drink:e.target.value}))}/></div>
+        <div style={{marginBottom:20}}><div style={{color:"#888",fontSize:12,marginBottom:6}}>Bio</div><textarea style={{...S.input,height:90,resize:"none"}} value={editData.bio} onChange={e=>setEditData(d=>({...d,bio:e.target.value}))}/></div>
         <button style={{...S.btnPrimary,opacity:savingProfile?0.6:1}} onClick={saveProfile} disabled={savingProfile}>{savingProfile?"Se salvează...":"✅ Salvează Profilul"}</button>
       </div></div>)}
 
-      {/* Confirm Delete */}
       {confirmDelete&&(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><div style={{background:"#1a1a1a",border:"1px solid #e87070",borderRadius:16,padding:24,maxWidth:300,width:"100%",textAlign:"center"}}>
         <div style={{fontSize:36,marginBottom:12}}>🗑️</div>
         <div style={{fontWeight:700,fontSize:16,marginBottom:8}}>Ștergi postarea?</div>
@@ -582,7 +542,6 @@ export default function App() {
         </div>
       </div></div>)}
 
-      {/* Send Challenge Modal */}
       {showChallengeModal&&(<div style={S.modal} onClick={()=>setShowChallengeModal(false)}><div style={S.modalBox} onClick={e=>e.stopPropagation()}>
         <button style={S.modalClose} onClick={()=>setShowChallengeModal(false)}>✕</button>
         <div style={{fontSize:18,fontWeight:700,color:"#f5a623",marginBottom:16,textAlign:"center"}}>🎯 Trimite o Provocare</div>
@@ -612,7 +571,6 @@ export default function App() {
         )}
       </div></div>)}
 
-      {/* Global Search */}
       {showGlobalSearch&&(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:300,padding:20}} onClick={()=>{setShowGlobalSearch(false);setGlobalSearch("");}}>
         <div onClick={e=>e.stopPropagation()}>
           <div style={{display:"flex",gap:10,marginBottom:16,marginTop:50}}>
@@ -639,7 +597,6 @@ export default function App() {
 
       <div style={S.content}>
 
-        {/* FEED */}
         {tab==="feed"&&(<div>
           <div style={S.composer}>
             <div style={{display:"flex",gap:10,marginBottom:10}}><span style={{fontSize:28}}>{profile?.emoji}</span><textarea style={S.composerInput} placeholder="Ce bei și ce gândești?" value={newPost} onChange={e=>setNewPost(e.target.value)} rows={2}/></div>
@@ -684,7 +641,6 @@ export default function App() {
           {posts.length===0&&<div style={S.emptyState}>🍺 Nicio postare încă.<br/>Fii primul care scrie ceva!</div>}
         </div>)}
 
-        {/* MAP */}
         {tab==="map"&&(<div>
           {!geo&&(<div style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:16,marginBottom:12,textAlign:"center"}}>
             <div style={{fontSize:32,marginBottom:8}}>🗺️</div>
@@ -695,7 +651,6 @@ export default function App() {
           <LiveMap allUsers={allUsers} currentUser={authUser} geo={geo} onUserClick={(u)=>setViewProfile(u)}/>
         </div>)}
 
-        {/* NEARBY */}
         {tab==="nearby"&&(<div>
           <div style={{marginBottom:16,display:"flex",flexDirection:"column",gap:10}}>
             {geo?<div style={{color:"#4caf82",fontSize:14,fontWeight:600}}>📍 Locație activă</div>:<button style={S.geoBtn} onClick={requestGeo}>📍 Activează Locația</button>}
@@ -719,43 +674,36 @@ export default function App() {
           </div>))}
         </div>)}
 
-        {/* FUN TAB - Challenges + Spin */}
         {tab==="fun"&&(<div>
-          {/* Sub-tabs */}
+          {/* 3 sub-tabs */}
           <div style={{display:"flex",background:"#1a1a1a",borderRadius:12,padding:4,gap:4,marginBottom:16}}>
-            <button style={{flex:1,background:funTab==="challenges"?"#f5a623":"none",color:funTab==="challenges"?"#111":"#888",border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:700,fontSize:14,position:"relative"}} onClick={()=>setFunTab("challenges")}>
+            <button style={{flex:1,background:funTab==="challenges"?"#f5a623":"none",color:funTab==="challenges"?"#111":"#888",border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:700,fontSize:13,position:"relative"}} onClick={()=>setFunTab("challenges")}>
               🎯 Provocări
               {pendingChallenges>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#e87070",color:"#fff",borderRadius:"50%",width:18,height:18,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>{pendingChallenges}</span>}
             </button>
-            <button style={{flex:1,background:funTab==="spin"?"#f5a623":"none",color:funTab==="spin"?"#111":"#888",border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:700,fontSize:14}} onClick={()=>setFunTab("spin")}>🍾 Spin</button>
+            <button style={{flex:1,background:funTab==="spin"?"#f5a623":"none",color:funTab==="spin"?"#111":"#888",border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:700,fontSize:13}} onClick={()=>setFunTab("spin")}>🍾 Spin</button>
+            <button style={{flex:1,background:funTab==="top"?"#f5a623":"none",color:funTab==="top"?"#111":"#888",border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:700,fontSize:13}} onClick={()=>setFunTab("top")}>🏆 Top</button>
           </div>
 
           {/* CHALLENGES */}
           {funTab==="challenges"&&(<div>
             <button style={{...S.btnPrimary,marginBottom:16}} onClick={()=>setShowChallengeModal(true)}>🎯 Trimite o Provocare!</button>
-
             {myChallenges.length===0&&<div style={S.emptyState}>🎯 Nicio provocare încă.<br/>Provoacă un prieten!</div>}
-
             {myChallenges.map(c=>{
               const isToMe=c.toId===authUser.uid;
-              const isFromMe=c.fromId===authUser.uid;
               return(
                 <div key={c.id} style={{...S.postCard,borderColor:c.status==="pending"&&isToMe?"#f5a623":c.status==="completed"?"#4caf82":c.status==="declined"?"#e87070":"#242424"}}>
                   <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:10}}>
                     <span style={{fontSize:28}}>{isToMe?c.fromEmoji:c.toEmoji}</span>
                     <div style={{flex:1}}>
-                      <div style={{fontWeight:700,fontSize:14,color:"#f5a623"}}>
-                        {isFromMe?`Tu → ${c.toName}`:`${c.fromName} → Tu`}
-                      </div>
+                      <div style={{fontWeight:700,fontSize:14,color:"#f5a623"}}>{c.fromId===authUser.uid?`Tu → ${c.toName}`:`${c.fromName} → Tu`}</div>
                       <div style={{color:"#666",fontSize:12}}>{timeAgo(c.createdAt)}</div>
                     </div>
                     <div style={{padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:c.status==="pending"?"#2a2000":c.status==="accepted"?"#1a3a2a":c.status==="completed"?"#1a3a2a":"#3a1a1a",color:c.status==="pending"?"#f5a623":c.status==="accepted"?"#4caf82":c.status==="completed"?"#4caf82":"#e87070"}}>
                       {c.status==="pending"?"⏳ Așteptare":c.status==="accepted"?"✅ Acceptat":c.status==="completed"?"🏆 Completat":"❌ Refuzat"}
                     </div>
                   </div>
-                  <div style={{fontSize:15,color:"#e8e0d0",marginBottom:12,padding:"10px 12px",background:"#1a1a1a",borderRadius:10}}>
-                    {c.text}
-                  </div>
+                  <div style={{fontSize:15,color:"#e8e0d0",marginBottom:12,padding:"10px 12px",background:"#1a1a1a",borderRadius:10}}>{c.text}</div>
                   {c.status==="pending"&&isToMe&&(
                     <div style={{display:"flex",gap:8}}>
                       <button style={{flex:1,background:"linear-gradient(135deg,#4caf82,#2d8a5e)",border:"none",borderRadius:10,padding:"10px",color:"#fff",cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:700}} onClick={()=>respondChallenge(c.id,true)}>💪 Accept!</button>
@@ -770,42 +718,43 @@ export default function App() {
             })}
           </div>)}
 
-          {/* SPIN THE BOTTLE */}
-          {funTab==="spin"&&(
-            <SpinBottle allUsers={allUsers} currentUser={authUser} profile={profile} onSpun={(winner)=>{showToast(`🍾 Sticla l-a ales pe ${winner.name}!`);}}/>
-          )}
-        </div>)}
+          {/* SPIN */}
+          {funTab==="spin"&&(<SpinBottle allUsers={allUsers} currentUser={authUser} onSpun={(winner)=>showToast(`🍾 Sticla l-a ales pe ${winner.name}!`)}/>)}
 
-        {/* LEADERBOARD */}
-        {tab==="leaderboard"&&(<div>
-          {myStats&&(<div style={{background:"linear-gradient(135deg,#1a1200,#2a2000)",border:"1px solid #f5a623",borderRadius:16,padding:16,marginBottom:20}}>
-            <div style={{color:"#f5a623",fontSize:12,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Statisticile Tale</div>
-            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
-              <div style={{fontSize:40}}>{myStats.emoji}</div>
-              <div><div style={{fontWeight:800,fontSize:18,color:"#f5a623"}}>{myStats.name}</div><div style={{color:"#888",fontSize:13}}>Locul #{myRank} în clasament</div></div>
-              <div style={{marginLeft:"auto",textAlign:"center"}}><div style={{fontSize:28,fontWeight:900,color:"#f5a623"}}>{myStats.score}</div><div style={{color:"#888",fontSize:11}}>puncte</div></div>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
-              {[{icon:"🍻",val:myStats.totalLikes,label:"Cheers"},{icon:"📝",val:myStats.totalPosts,label:"Postări"},{icon:"💬",val:myStats.totalComments,label:"Comentarii"},{icon:"🎯",val:challenges.filter(c=>c.toId===authUser.uid&&c.status==="completed").length,label:"Provocări"}].map(s=>(<div key={s.label} style={{background:"rgba(0,0,0,0.3)",borderRadius:10,padding:"8px 4px",textAlign:"center"}}><div style={{fontSize:18}}>{s.icon}</div><div style={{fontWeight:800,fontSize:16,color:"#f5a623"}}>{s.val}</div><div style={{color:"#888",fontSize:10}}>{s.label}</div></div>))}
-            </div>
-            <div style={{borderTop:"1px solid #333",paddingTop:12}}>
-              <div style={{color:"#888",fontSize:12,marginBottom:8}}>Badge-urile tale:</div>
-              {myStats.badges.length===0&&<div style={{color:"#555",fontSize:13,fontStyle:"italic"}}>Încă niciun badge. Fii mai activ! 🍺</div>}
-              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>{myStats.badges.map(bid=>{const b=BADGE_DEFS.find(x=>x.id===bid);if(!b)return null;return(<button key={bid} style={{background:"#1e1e1e",border:"1px solid #333",borderRadius:20,padding:"6px 12px",display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:"#e8e0d0",fontSize:13}} onClick={()=>setBadgeTooltip(b)}><span>{b.icon}</span><span>{b.name}</span></button>);})}</div>
+          {/* TOP / LEADERBOARD */}
+          {funTab==="top"&&(<div>
+            {myStats&&(<div style={{background:"linear-gradient(135deg,#1a1200,#2a2000)",border:"1px solid #f5a623",borderRadius:16,padding:16,marginBottom:20}}>
+              <div style={{color:"#f5a623",fontSize:12,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Statisticile Tale</div>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+                <div style={{fontSize:40}}>{myStats.emoji}</div>
+                <div><div style={{fontWeight:800,fontSize:18,color:"#f5a623"}}>{myStats.name}</div><div style={{color:"#888",fontSize:13}}>Locul #{myRank} în clasament</div></div>
+                <div style={{marginLeft:"auto",textAlign:"center"}}><div style={{fontSize:28,fontWeight:900,color:"#f5a623"}}>{myStats.score}</div><div style={{color:"#888",fontSize:11}}>puncte</div></div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+                {[{icon:"🍻",val:myStats.totalLikes,label:"Cheers"},{icon:"📝",val:myStats.totalPosts,label:"Postări"},{icon:"💬",val:myStats.totalComments,label:"Comentarii"},{icon:"🎯",val:challenges.filter(c=>c.toId===authUser.uid&&c.status==="completed").length,label:"Provocări"}].map(s=>(<div key={s.label} style={{background:"rgba(0,0,0,0.3)",borderRadius:10,padding:"8px 4px",textAlign:"center"}}><div style={{fontSize:18}}>{s.icon}</div><div style={{fontWeight:800,fontSize:16,color:"#f5a623"}}>{s.val}</div><div style={{color:"#888",fontSize:10}}>{s.label}</div></div>))}
+              </div>
+              <div style={{borderTop:"1px solid #333",paddingTop:12}}>
+                <div style={{color:"#888",fontSize:12,marginBottom:8}}>Badge-urile tale:</div>
+                {myStats.badges.length===0&&<div style={{color:"#555",fontSize:13,fontStyle:"italic"}}>Încă niciun badge. Fii mai activ! 🍺</div>}
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>{myStats.badges.map(bid=>{const b=BADGE_DEFS.find(x=>x.id===bid);if(!b)return null;return(<button key={bid} style={{background:"#1e1e1e",border:"1px solid #333",borderRadius:20,padding:"6px 12px",display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:"#e8e0d0",fontSize:13}} onClick={()=>setBadgeTooltip(b)}><span>{b.icon}</span><span>{b.name}</span></button>);})}</div>
+              </div>
+            </div>)}
+            <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>🏆 Clasament</div>
+            {leaderboard.map((u,i)=>(<div key={u.id} style={{...S.postCard,borderColor:i===0?"#f5a623":i===1?"#888":i===2?"#cd7f32":"#242424",cursor:"pointer"}} onClick={()=>setViewProfile(u)}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{fontSize:24,width:32,textAlign:"center",fontWeight:900,color:i===0?"#f5a623":i===1?"#aaa":i===2?"#cd7f32":"#666"}}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":`#${i+1}`}</div>
+                <span style={{fontSize:28}}>{u.emoji}</span>
+                <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:u.id===authUser.uid?"#f5a623":"#e8e0d0"}}>{u.name} {u.id===authUser.uid&&"(tu)"}</div><div style={{display:"flex",gap:8,marginTop:4}}>{u.badges.slice(0,3).map(bid=>{const b=BADGE_DEFS.find(x=>x.id===bid);return b?<span key={bid}>{b.icon}</span>:null;})}</div></div>
+                <div style={{textAlign:"right"}}><div style={{fontWeight:800,fontSize:18,color:"#f5a623"}}>{u.score}</div><div style={{color:"#888",fontSize:11}}>🍻{u.totalLikes} 🎯{challenges.filter(c=>(c.fromId===u.id||c.toId===u.id)&&c.status==="completed").length}</div></div>
+              </div>
+            </div>))}
+            <div style={{marginTop:24,borderTop:"1px solid #1e1e1e",paddingTop:16}}>
+              <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Toate Badge-urile</div>
+              {BADGE_DEFS.map(b=>(<div key={b.id} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}><span style={{fontSize:24,width:30,textAlign:"center"}}>{b.icon}</span><div><div style={{fontWeight:700,fontSize:14}}>{b.name}</div><div style={{color:"#888",fontSize:12}}>{b.desc}</div></div></div>))}
             </div>
           </div>)}
-          <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>🏆 Clasament</div>
-          {leaderboard.map((u,i)=>(<div key={u.id} style={{...S.postCard,borderColor:i===0?"#f5a623":i===1?"#888":i===2?"#cd7f32":"#242424",cursor:"pointer"}} onClick={()=>setViewProfile(u)}>
-            <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <div style={{fontSize:24,width:32,textAlign:"center",fontWeight:900,color:i===0?"#f5a623":i===1?"#aaa":i===2?"#cd7f32":"#666"}}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":`#${i+1}`}</div>
-              <span style={{fontSize:28}}>{u.emoji}</span>
-              <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:u.id===authUser.uid?"#f5a623":"#e8e0d0"}}>{u.name} {u.id===authUser.uid&&"(tu)"}</div><div style={{display:"flex",gap:8,marginTop:4}}>{u.badges.slice(0,3).map(bid=>{const b=BADGE_DEFS.find(x=>x.id===bid);return b?<span key={bid}>{b.icon}</span>:null;})}</div></div>
-              <div style={{textAlign:"right"}}><div style={{fontWeight:800,fontSize:18,color:"#f5a623"}}>{u.score}</div><div style={{color:"#888",fontSize:11}}>🍻{u.totalLikes} 🎯{challenges.filter(c=>(c.fromId===u.id||c.toId===u.id)&&c.status==="completed").length}</div></div>
-            </div>
-          </div>))}
         </div>)}
 
-        {/* MESSAGES */}
         {tab==="messages"&&!chatWith&&(<div>
           <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Conversații</div>
           {conversations.map(conv=>{const otherId=conv.participants.find(p=>p!==authUser.uid);const otherName=conv.participantNames?.[otherId]||"Utilizator";const otherEmoji=conv.participantEmojis?.[otherId]||"🍺";const isUnread=conv.lastSenderId!==authUser.uid&&!(conv.readBy||[]).includes(authUser.uid);const otherUser=allUsers.find(u=>u.id===otherId);return(<div key={conv.id} style={{...S.postCard,cursor:"pointer",borderColor:isUnread?"#f5a623":"#242424"}} onClick={()=>otherUser&&setChatWith(otherUser)}><div style={{display:"flex",gap:12,alignItems:"center"}}><span style={{fontSize:32}}>{otherEmoji}</span><div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,color:isUnread?"#f5a623":"#e8e0d0"}}>{otherName}</div><div style={{color:"#888",fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{conv.lastMessage}</div></div><div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}><span style={{color:"#555",fontSize:11}}>{timeAgo(conv.lastMessageAt)}</span>{isUnread&&<span style={{background:"#f5a623",color:"#111",borderRadius:10,padding:"2px 7px",fontSize:11,fontWeight:700}}>nou</span>}</div></div></div>);})}
@@ -836,7 +785,6 @@ export default function App() {
         {tab==="profile"&&profile&&(<ProfileView user={{...profile,id:authUser.uid}} posts={posts} allUsers={allUsers} isOwn={true} onSignOut={handleSignOut} onEdit={openEditProfile} onLightbox={setLightboxImg} onBadge={setBadgeTooltip} onChallenge={(u)=>{setChallengeTarget(u);setShowChallengeModal(true);}} styles={S} timeAgo={timeAgo} getTitle={getTitle} computeBadges={computeBadges} BADGE_DEFS={BADGE_DEFS}/>)}
       </div>
 
-      {/* NAV */}
       <div style={S.nav}>
         {[
           {key:"feed",icon:"🏠",label:"Feed"},
