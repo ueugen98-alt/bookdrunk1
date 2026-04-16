@@ -387,4 +387,100 @@ export default function App() {
           </div>
           <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:8,paddingBottom:8}}>
             {messages.length===0&&<div style={{textAlign:"center",color:"#555",marginTop:40,fontStyle:"italic"}}>Începe conversația! 🍺</div>}
-            {messages.map(msg=>{const isMe=msg.senderId===authUser.uid;return(<div key={msg.id} st
+            {messages.map(msg=>{const isMe=msg.senderId===authUser.uid;return(<div key={msg.id} style={{display:"flex",justifyContent:isMe?"flex-end":"flex-start"}}><div style={{maxWidth:"75%",background:isMe?"linear-gradient(135deg,#f5a623,#e8890a)":"#1e1e1e",color:isMe?"#111":"#e8e0d0",borderRadius:isMe?"16px 16px 4px 16px":"16px 16px 16px 4px",padding:"10px 14px",fontSize:14,lineHeight:1.5}}><div>{msg.text}</div><div style={{fontSize:10,opacity:0.6,marginTop:4,textAlign:"right"}}>{timeAgo(msg.createdAt)}</div></div></div>);})}
+            <div ref={messagesEndRef}/>
+          </div>
+          <div style={{display:"flex",gap:8,paddingTop:8,borderTop:"1px solid #1e1e1e"}}>
+            <input style={{...S.input,flex:1,padding:"10px 14px"}} placeholder="Scrie un mesaj..." value={newMsg} onChange={e=>setNewMsg(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMessage()}/>
+            <button style={{...S.postBtn,padding:"10px 16px",fontSize:18}} onClick={sendMessage}>→</button>
+          </div>
+        </div>)}
+
+        {tab==="profile"&&profile&&(<ProfileView user={{...profile,id:authUser.uid}} posts={posts} allUsers={allUsers} isOwn={true} onSignOut={handleSignOut} onLightbox={setLightboxImg} onBadge={setBadgeTooltip} styles={S} timeAgo={timeAgo} getTitle={getTitle} computeBadges={computeBadges} BADGE_DEFS={BADGE_DEFS}/>)}
+      </div>
+
+      <div style={S.nav}>
+        {[{key:"feed",icon:"🏠",label:"Feed"},{key:"nearby",icon:"📍",label:"Aproape"},{key:"leaderboard",icon:"🏆",label:"Top"},{key:"messages",icon:"💬",label:"Mesaje",badge:unreadCount},{key:"profile",icon:profile?.emoji,label:"Profil"}].map(t=>(
+          <button key={t.key} style={{...S.navBtn,...(tab===t.key?S.navBtnActive:{})}} onClick={()=>{setTab(t.key);if(t.key!=="messages")setChatWith(null);setOpenComments(null);}}>
+            <div style={{position:"relative",display:"inline-block"}}>
+              <span style={{fontSize:20}}>{t.icon}</span>
+              {t.badge>0&&<span style={{position:"absolute",top:-4,right:-6,background:"#e87070",color:"#fff",borderRadius:"50%",width:16,height:16,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>{t.badge}</span>}
+            </div>
+            <span style={{fontSize:9,letterSpacing:0.5}}>{t.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {viewProfile&&(<div style={S.modal} onClick={()=>setViewProfile(null)}><div style={S.modalBox} onClick={e=>e.stopPropagation()}><button style={S.modalClose} onClick={()=>setViewProfile(null)}>✕</button><ProfileView user={viewProfile} posts={posts} allUsers={allUsers} isOwn={viewProfile.id===authUser.uid} onReview={u=>{setViewProfile(null);setReviewTarget(u);setReviewText("");setReviewRating(5);}} onChat={u=>openChat(u)} onLightbox={setLightboxImg} onBadge={setBadgeTooltip} styles={S} timeAgo={timeAgo} getTitle={getTitle} computeBadges={computeBadges} BADGE_DEFS={BADGE_DEFS}/></div></div>)}
+
+      {reviewTarget&&(<div style={S.modal} onClick={()=>setReviewTarget(null)}><div style={S.modalBox} onClick={e=>e.stopPropagation()}><button style={S.modalClose} onClick={()=>setReviewTarget(null)}>✕</button><div style={{fontSize:18,fontWeight:700,color:"#f5a623",marginBottom:16,textAlign:"center"}}>Recenzie pentru {reviewTarget.name}</div><div style={{display:"flex",justifyContent:"center",gap:8,marginBottom:8}}>{[1,2,3,4,5].map(s=><button key={s} style={{background:"none",border:"none",cursor:"pointer",padding:2}} onMouseEnter={()=>setHoverRating(s)} onMouseLeave={()=>setHoverRating(0)} onClick={()=>setReviewRating(s)}><span style={{fontSize:28,color:s<=(hoverRating||reviewRating)?"#f5a623":"#444"}}>★</span></button>)}</div><div style={{textAlign:"center",color:"#f5a623",marginBottom:12,fontSize:14}}>{["","Dezamăgire totală","Poate cu noroc","Ok, nimic special","Bun tovarăș","Legendă!"][hoverRating||reviewRating]}</div><textarea style={{...S.input,height:90,resize:"none"}} placeholder="Povestește ce știi despre el/ea..." value={reviewText} onChange={e=>setReviewText(e.target.value)}/><button style={S.btnPrimary} onClick={submitReview}>Trimite Recenzia 🍺</button></div></div>)}
+    </div>
+  );
+}
+
+function ProfileView({user,posts,allUsers,isOwn,onSignOut,onReview,onChat,onLightbox,onBadge,styles:S,timeAgo,getTitle,computeBadges,BADGE_DEFS}){
+  const userPosts=posts.filter(p=>p.userId===user.id);
+  const totalLikes=userPosts.reduce((s,p)=>s+(p.likes||[]).length,0);
+  const badges=computeBadges({...user,id:user.id||user.uid},posts,allUsers||[]);
+  return(<div style={{paddingBottom:20}}>
+    <div style={{textAlign:"center",paddingBottom:20,borderBottom:"1px solid #1e1e1e",marginBottom:16}}>
+      <div style={{fontSize:64,marginBottom:8}}>{user.emoji}</div>
+      <div style={{fontSize:22,fontWeight:800,color:"#f5a623"}}>{user.name}</div>
+      <div style={{color:"#888",fontSize:13,fontStyle:"italic",marginTop:4}}>{getTitle(user.avgRating)}</div>
+      <div style={{color:"#bbb",fontSize:14,marginTop:6}}>🥤 {user.drink}</div>
+      <div style={{color:"#aaa",fontSize:14,marginTop:10,fontStyle:"italic",lineHeight:1.6}}>{user.bio}</div>
+      <div style={{marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><span style={{color:"#f5a623",fontSize:20}}>{"★".repeat(Math.round(user.avgRating||0))}</span><span style={{color:"#888",fontSize:12}}>{user.avgRating||0} ({user.totalRatings||0} recenzii)</span></div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginTop:14}}>
+        {[{icon:"📝",val:userPosts.length,label:"Postări"},{icon:"🍻",val:totalLikes,label:"Cheers"},{icon:"⭐",val:user.totalRatings||0,label:"Recenzii"}].map(s=>(<div key={s.label} style={{background:"#1a1a1a",borderRadius:10,padding:"8px 4px",textAlign:"center"}}><div style={{fontSize:18}}>{s.icon}</div><div style={{fontWeight:800,fontSize:16,color:"#f5a623"}}>{s.val}</div><div style={{color:"#888",fontSize:11}}>{s.label}</div></div>))}
+      </div>
+      {badges.length>0&&(<div style={{marginTop:14}}><div style={{color:"#888",fontSize:12,marginBottom:8}}>Badge-uri:</div><div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center"}}>{badges.map(bid=>{const b=BADGE_DEFS.find(x=>x.id===bid);if(!b)return null;return(<button key={bid} style={{background:"#1e1e1e",border:"1px solid #333",borderRadius:20,padding:"5px 10px",display:"flex",alignItems:"center",gap:5,cursor:"pointer",color:"#e8e0d0",fontSize:12}} onClick={()=>onBadge&&onBadge(b)}><span>{b.icon}</span><span>{b.name}</span></button>);})}</div></div>)}
+      {!isOwn&&<div style={{display:"flex",gap:8,marginTop:12}}>{onReview&&<button style={{...S.btnPrimary,flex:1}} onClick={()=>onReview(user)}>⭐ Recenzie</button>}{onChat&&<button style={{...S.btnPrimary,flex:1,background:"linear-gradient(135deg,#4caf82,#2d8a5e)"}} onClick={()=>onChat(user)}>💬 Mesaj</button>}</div>}
+      {isOwn&&onSignOut&&<button style={{...S.btnSmall,marginTop:12,width:"100%",padding:"10px",color:"#e87070",border:"1px solid #e87070"}} onClick={onSignOut}>Deconectare</button>}
+    </div>
+    {(user.ratings||[]).length>0&&<div style={{marginBottom:16}}><div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Recenzii</div>{[...(user.ratings||[])].reverse().map((r,i)=>(<div key={i} style={{background:"#1a1a1a",borderRadius:10,padding:12,marginBottom:8}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{color:"#f5a623"}}>{"★".repeat(r.rating)}</span><span style={{fontWeight:700,fontSize:13,color:"#ccc"}}>{r.fromName}</span><span style={{color:"#555",fontSize:12,marginLeft:"auto"}}>{timeAgo({seconds:r.time/1000})}</span></div><div style={{color:"#bbb",fontSize:14,lineHeight:1.5}}>{r.text}</div></div>))}</div>}
+    {userPosts.length>0&&<div><div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Postări</div>{userPosts.map(p=>(<div key={p.id} style={{background:"#1a1a1a",borderRadius:10,padding:12,marginBottom:8}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span>{p.drink}</span><span style={{color:"#555",fontSize:12,marginLeft:"auto"}}>{timeAgo(p.createdAt)}</span></div>{p.text&&<div style={{color:"#bbb",fontSize:14,lineHeight:1.5,marginBottom:p.imageUrl?8:0}}>{p.text}</div>}{p.imageUrl&&<img src={p.imageUrl} alt="" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:8,cursor:"pointer"}} onClick={()=>onLightbox&&onLightbox(p.imageUrl)}/>}<div style={{color:"#888",fontSize:12,marginTop:6}}>🍻 {(p.likes||[]).length} cheers · 💬 {p.commentCount||0}</div></div>))}</div>}
+  </div>);
+}
+
+const S={
+  splash:{minHeight:"100vh",background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",position:"relative",flexDirection:"column"},
+  splashGlow:{position:"absolute",width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,rgba(245,166,35,0.25) 0%,transparent 70%)",top:"50%",left:"50%",transform:"translate(-50%,-50%)"},
+  splashTitle:{fontSize:36,fontWeight:900,letterSpacing:8,color:"#f5a623",textAlign:"center"},
+  splashLoader:{width:200,height:3,background:"#222",borderRadius:2,margin:"24px auto 0",overflow:"hidden"},
+  splashBar:{height:"100%",background:"linear-gradient(90deg,#f5a623,#e8890a)",borderRadius:2,animation:"load 2s ease-in-out forwards"},
+  root:{minHeight:"100vh",background:"#0f0f0f",color:"#e8e0d0",fontFamily:"Georgia,serif",maxWidth:480,margin:"0 auto",position:"relative"},
+  loginWrap:{padding:"40px 24px",display:"flex",flexDirection:"column",gap:14,minHeight:"100vh"},
+  authTabs:{display:"flex",background:"#1a1a1a",borderRadius:10,padding:4,gap:4},
+  authTab:{flex:1,background:"none",border:"none",color:"#888",padding:"10px",borderRadius:8,cursor:"pointer",fontFamily:"Georgia,serif",fontSize:15},
+  authTabActive:{background:"#f5a623",color:"#111",fontWeight:700},
+  input:{width:"100%",boxSizing:"border-box",background:"#1a1a1a",border:"1px solid #333",borderRadius:10,padding:"12px 14px",color:"#e8e0d0",fontSize:16,fontFamily:"Georgia,serif",outline:"none"},
+  btnPrimary:{background:"linear-gradient(135deg,#f5a623,#e8890a)",color:"#111",border:"none",borderRadius:10,padding:"14px 20px",fontWeight:800,fontSize:16,cursor:"pointer",letterSpacing:1,width:"100%",fontFamily:"Georgia,serif"},
+  setupHeader:{display:"flex",alignItems:"center",gap:12,marginBottom:8},
+  backBtn:{background:"none",border:"none",color:"#f5a623",fontSize:20,cursor:"pointer",padding:"4px 8px"},
+  setupQ:{fontSize:22,fontWeight:700,marginBottom:8,color:"#f5a623"},
+  emojiGrid:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12},
+  emojiBtn:{fontSize:32,background:"#1a1a1a",border:"2px solid #2a2a2a",borderRadius:12,padding:"12px",cursor:"pointer"},
+  emojiBtnActive:{border:"2px solid #f5a623",background:"#2a2000"},
+  header:{position:"sticky",top:0,zIndex:50,background:"rgba(15,15,15,0.95)",backdropFilter:"blur(10px)",borderBottom:"1px solid #1e1e1e",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px"},
+  avatarBtn:{background:"#1e1e1e",border:"1px solid #2a2a2a",borderRadius:"50%",width:38,height:38,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},
+  content:{padding:16,paddingBottom:80},
+  composer:{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:14,marginBottom:16},
+  composerInput:{flex:1,background:"none",border:"none",color:"#e8e0d0",fontSize:15,resize:"none",outline:"none",fontFamily:"Georgia,serif",width:"100%"},
+  drinkBtn:{background:"none",border:"1px solid #2a2a2a",borderRadius:8,padding:"4px 6px",fontSize:16,cursor:"pointer"},
+  drinkBtnActive:{background:"#2a2000",border:"1px solid #f5a623"},
+  postBtn:{background:"#f5a623",color:"#111",border:"none",borderRadius:8,padding:"8px 16px",fontWeight:800,cursor:"pointer",fontFamily:"Georgia,serif"},
+  postCard:{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:14,marginBottom:12},
+  postAvatar:{fontSize:26,background:"#1e1e1e",border:"1px solid #2a2a2a",borderRadius:"50%",width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0},
+  likeBtn:{background:"#1e1e1e",border:"1px solid #2a2a2a",borderRadius:8,padding:"6px 12px",color:"#ccc",cursor:"pointer",fontSize:13,fontFamily:"Georgia,serif"},
+  geoBtn:{background:"#1e1e1e",border:"1px solid #f5a623",color:"#f5a623",borderRadius:10,padding:"10px 16px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:14},
+  emptyState:{textAlign:"center",color:"#666",fontSize:16,lineHeight:1.8,marginTop:60,fontStyle:"italic"},
+  nearbyCard:{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:14,marginBottom:12,display:"flex",alignItems:"center",gap:12},
+  btnSmall:{background:"#1e1e1e",border:"1px solid #2a2a2a",color:"#e8e0d0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",whiteSpace:"nowrap"},
+  nav:{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"rgba(10,10,10,0.97)",backdropFilter:"blur(10px)",borderTop:"1px solid #1e1e1e",display:"flex",zIndex:100},
+  navBtn:{flex:1,background:"none",border:"none",color:"#666",cursor:"pointer",padding:"10px 0 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:3,fontFamily:"Georgia,serif"},
+  navBtnActive:{color:"#f5a623"},
+  modal:{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(4px)"},
+  modalBox:{background:"#141414",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,maxHeight:"85vh",overflowY:"auto",padding:20,position:"relative",borderTop:"1px solid #2a2a2a"},
+  modalClose:{position:"absolute",top:16,right:16,background:"#2a2a2a",border:"none",color:"#ccc",width:32,height:32,borderRadius:"50%",cursor:"pointer",fontSize:14},
+  toast:{position:"fixed",top:70,left:"50%",transform:"translateX(-50%)",background:"#f5a623",color:"#111",padding:"10px 20px",borderRadius:30,fontWeight:700,fontSize:14,zIndex:300,whiteSpace:"nowrap",boxShadow:"0 4px 20px rgba(245,166,35,0.4)"},
+};
