@@ -1,0 +1,9 @@
+{
+  "short_name": "DrunkBook",
+  "name": "DrunkBook - Rețeaua Bețivilor",
+  "icons": [{ "src": "favicon.ico", "sizes": "64x64", "type": "image/x-icon" }],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#f5a623",
+  "background_color": "#0f0f0f"
+}
