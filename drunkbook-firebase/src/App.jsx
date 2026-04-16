@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { auth, db } from "./firebase";
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, onAuthStateChanged,
+  signOut,
 } from "firebase/auth";
 import {
   doc, setDoc, getDoc, collection, addDoc, onSnapshot,
@@ -11,6 +11,7 @@ import {
 
 const DRINKS = ["🍺","🍻","🥃","🍷","🍸","🍹","🥂","🍾"];
 const TITLES = ["Încă Sobru","Prima Bere","Al Doilea Rând","Vibe Check","Deja Fluent","Filozoful Barului","Regele Mesei","Legendă Vie"];
+const IMGBB_KEY = "8a79556a7f61c84b45baf5005c507fe2";
 
 function getTitle(r){if(!r||r<1)return TITLES[0];if(r<2)return TITLES[1];if(r<3)return TITLES[2];if(r<4)return TITLES[3];if(r<5)return TITLES[4];if(r<6)return TITLES[5];if(r<8)return TITLES[6];return TITLES[7];}
 function distKm(lat1,lon1,lat2,lon2){const R=6371,dLat=((lat2-lat1)*Math.PI)/180,dLon=((lon2-lon1)*Math.PI)/180,a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
@@ -19,6 +20,18 @@ function getChatId(a,b){return [a,b].sort().join("_");}
 function setCookie(n,v,d=365){document.cookie=`${n}=${encodeURIComponent(v)};path=/;max-age=${d*86400};SameSite=Lax`;}
 function getCookie(n){return decodeURIComponent(document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith(n+'='))?.split('=')[1]||'');}
 function deleteCookie(n){document.cookie=`${n}=;path=/;max-age=0`;}
+
+async function uploadToImgbb(file) {
+  const formData = new FormData();
+  formData.append('image', file);
+  const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, {
+    method: 'POST',
+    body: formData,
+  });
+  const data = await res.json();
+  if (data.success) return data.data.url;
+  throw new Error('Upload failed');
+}
 
 export default function App() {
   const [authUser,setAuthUser]=useState(null);
@@ -35,6 +48,9 @@ export default function App() {
   const [posts,setPosts]=useState([]);
   const [newPost,setNewPost]=useState("");
   const [selectedDrink,setSelectedDrink]=useState("🍺");
+  const [postImage,setPostImage]=useState(null);
+  const [postImagePreview,setPostImagePreview]=useState(null);
+  const [uploadingPost,setUploadingPost]=useState(false);
   const [geo,setGeo]=useState(null);
   const [geoError,setGeoError]=useState("");
   const [radius,setRadius]=useState(10);
@@ -53,10 +69,11 @@ export default function App() {
   const [openComments,setOpenComments]=useState(null);
   const [comments,setComments]=useState({});
   const [newComment,setNewComment]=useState("");
+  const [lightboxImg,setLightboxImg]=useState(null);
   const messagesEndRef=useRef(null);
   const commentInputRef=useRef(null);
+  const fileInputRef=useRef(null);
 
-  // Auto-login on mount
   useEffect(()=>{
     async function tryAutoLogin(){
       try{
@@ -77,13 +94,11 @@ export default function App() {
             deleteCookie('db_email');deleteCookie('db_pass');
             setScreen("auth");
           }
-        } else {
-          setScreen("auth");
-        }
+        }else{setScreen("auth");}
       }catch(e){setScreen("auth");}
       setLoading(false);
     }
-    setTimeout(()=>tryAutoLogin(), 2200);
+    setTimeout(()=>tryAutoLogin(),2200);
   },[]);
 
   useEffect(()=>{
@@ -170,10 +185,38 @@ export default function App() {
     },()=>setGeoError("Nu ai dat acces la locație."));
   }
 
+  function handleImageSelect(e){
+    const file=e.target.files[0];
+    if(!file)return;
+    if(file.size>10*1024*1024){showToast("Poza e prea mare! Max 10MB");return;}
+    setPostImage(file);
+    setPostImagePreview(URL.createObjectURL(file));
+  }
+
+  function removeImage(){
+    setPostImage(null);
+    setPostImagePreview(null);
+    if(fileInputRef.current)fileInputRef.current.value="";
+  }
+
   async function submitPost(){
-    if(!newPost.trim())return;
-    await addDoc(collection(db,"posts"),{userId:authUser.uid,userName:profile.name,userEmoji:profile.emoji,text:newPost,drink:selectedDrink,likes:[],commentCount:0,createdAt:serverTimestamp()});
-    setNewPost("");showToast("Postare publicată! 🍻");
+    if(!newPost.trim()&&!postImage)return;
+    setUploadingPost(true);
+    try{
+      let imageUrl=null;
+      if(postImage){
+        showToast("Se încarcă poza... 📸");
+        imageUrl=await uploadToImgbb(postImage);
+      }
+      await addDoc(collection(db,"posts"),{
+        userId:authUser.uid,userName:profile.name,userEmoji:profile.emoji,
+        text:newPost,drink:selectedDrink,likes:[],commentCount:0,
+        imageUrl,createdAt:serverTimestamp(),
+      });
+      setNewPost("");removeImage();
+      showToast("Postare publicată! 🍻");
+    }catch(e){showToast("Eroare la upload! Încearcă din nou.");}
+    setUploadingPost(false);
   }
 
   async function toggleLike(postId,likes){
@@ -208,12 +251,9 @@ export default function App() {
   function openChat(user){setChatWith(user);setViewProfile(null);setTab("messages");}
 
   async function handleSignOut(){
-    deleteCookie('db_email');
-    deleteCookie('db_pass');
+    deleteCookie('db_email');deleteCookie('db_pass');
     await signOut(auth);
-    setScreen("auth");
-    setProfile(null);
-    setAuthUser(null);
+    setScreen("auth");setProfile(null);setAuthUser(null);
   }
 
   const nearbyUsers=allUsers.filter(u=>u.id!==authUser?.uid&&u.lat&&geo&&distKm(geo.lat,geo.lon,u.lat,u.lon)<=radius);
@@ -254,23 +294,44 @@ export default function App() {
   return(
     <div style={S.root}>
       {toast&&<div style={S.toast}>{toast}</div>}
+
+      {lightboxImg&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setLightboxImg(null)}>
+          <img src={lightboxImg} alt="" style={{maxWidth:"95vw",maxHeight:"90vh",borderRadius:12,objectFit:"contain"}}/>
+          <button style={{position:"absolute",top:20,right:20,background:"#2a2a2a",border:"none",color:"#fff",width:36,height:36,borderRadius:"50%",fontSize:18,cursor:"pointer"}}>✕</button>
+        </div>
+      )}
+
       <div style={S.header}>
         <span style={{fontWeight:900,fontSize:18,letterSpacing:3,color:"#f5a623"}}>🍺 DRUNKBOOK</span>
         <button style={S.avatarBtn} onClick={()=>setViewProfile({...profile,id:authUser.uid})}>{profile?.emoji}</button>
       </div>
-      <div style={S.content}>
 
+      <div style={S.content}>
         {tab==="feed"&&(<div>
           <div style={S.composer}>
             <div style={{display:"flex",gap:10,marginBottom:10}}>
               <span style={{fontSize:28}}>{profile?.emoji}</span>
               <textarea style={S.composerInput} placeholder="Ce bei și ce gândești?" value={newPost} onChange={e=>setNewPost(e.target.value)} rows={2}/>
             </div>
+            {postImagePreview&&(
+              <div style={{position:"relative",marginBottom:10}}>
+                <img src={postImagePreview} alt="" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:10}}/>
+                <button onClick={removeImage} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.7)",border:"none",color:"#fff",width:28,height:28,borderRadius:"50%",cursor:"pointer",fontSize:14}}>✕</button>
+              </div>
+            )}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-              <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{DRINKS.map(d=><button key={d} style={{...S.drinkBtn,...(selectedDrink===d?S.drinkBtnActive:{})}} onClick={()=>setSelectedDrink(d)}>{d}</button>)}</div>
-              <button style={S.postBtn} onClick={submitPost}>Postează</button>
+              <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
+                {DRINKS.map(d=><button key={d} style={{...S.drinkBtn,...(selectedDrink===d?S.drinkBtnActive:{})}} onClick={()=>setSelectedDrink(d)}>{d}</button>)}
+                <button style={{...S.drinkBtn,color:"#f5a623",borderColor:"#f5a623",fontSize:18}} onClick={()=>fileInputRef.current?.click()}>📸</button>
+                <input ref={fileInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleImageSelect}/>
+              </div>
+              <button style={{...S.postBtn,opacity:uploadingPost?0.6:1}} onClick={submitPost} disabled={uploadingPost}>
+                {uploadingPost?"Se încarcă...":"Postează"}
+              </button>
             </div>
           </div>
+
           {posts.map(post=>(
             <div key={post.id} style={S.postCard}>
               <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:10}}>
@@ -281,7 +342,12 @@ export default function App() {
                 </div>
                 {post.userId!==authUser.uid&&<button style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:"4px 8px"}} onClick={()=>{const u=allUsers.find(u=>u.id===post.userId);if(u)openChat(u);}}>💬</button>}
               </div>
-              <div style={{fontSize:15,lineHeight:1.6,color:"#ddd",marginBottom:12}}>{post.text}</div>
+              {post.text&&<div style={{fontSize:15,lineHeight:1.6,color:"#ddd",marginBottom:post.imageUrl?10:12}}>{post.text}</div>}
+              {post.imageUrl&&(
+                <div style={{marginBottom:12,cursor:"pointer"}} onClick={()=>setLightboxImg(post.imageUrl)}>
+                  <img src={post.imageUrl} alt="" style={{width:"100%",maxHeight:300,objectFit:"cover",borderRadius:10}}/>
+                </div>
+              )}
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
                 <button style={S.likeBtn} onClick={()=>toggleLike(post.id,post.likes||[])}>🍻 {(post.likes||[]).length}{(post.likes||[]).includes(authUser.uid)?" · cheers!":""}</button>
                 <button style={{...S.likeBtn,color:openComments===post.id?"#f5a623":"#ccc",borderColor:openComments===post.id?"#f5a623":"#2a2a2a"}} onClick={()=>{setOpenComments(openComments===post.id?null:post.id);setNewComment("");setTimeout(()=>commentInputRef.current?.focus(),200);}}>💬 {post.commentCount||0}</button>
@@ -390,7 +456,7 @@ export default function App() {
           </div>
         </div>)}
 
-        {tab==="profile"&&profile&&(<ProfileView user={{...profile,id:authUser.uid}} posts={posts} isOwn={true} onSignOut={handleSignOut} styles={S} timeAgo={timeAgo} getTitle={getTitle}/>)}
+        {tab==="profile"&&profile&&(<ProfileView user={{...profile,id:authUser.uid}} posts={posts} isOwn={true} onSignOut={handleSignOut} onLightbox={setLightboxImg} styles={S} timeAgo={timeAgo} getTitle={getTitle}/>)}
       </div>
 
       <div style={S.nav}>
@@ -409,7 +475,7 @@ export default function App() {
         <button style={S.modalClose} onClick={()=>setViewProfile(null)}>✕</button>
         <ProfileView user={viewProfile} posts={posts} isOwn={viewProfile.id===authUser.uid}
           onReview={u=>{setViewProfile(null);setReviewTarget(u);setReviewText("");setReviewRating(5);}}
-          onChat={u=>openChat(u)} styles={S} timeAgo={timeAgo} getTitle={getTitle}/>
+          onChat={u=>openChat(u)} onLightbox={setLightboxImg} styles={S} timeAgo={timeAgo} getTitle={getTitle}/>
       </div></div>)}
 
       {reviewTarget&&(<div style={S.modal} onClick={()=>setReviewTarget(null)}><div style={S.modalBox} onClick={e=>e.stopPropagation()}>
@@ -426,7 +492,7 @@ export default function App() {
   );
 }
 
-function ProfileView({user,posts,isOwn,onSignOut,onReview,onChat,styles:S,timeAgo,getTitle}){
+function ProfileView({user,posts,isOwn,onSignOut,onReview,onChat,onLightbox,styles:S,timeAgo,getTitle}){
   const userPosts=posts.filter(p=>p.userId===user.id);
   return(<div style={{paddingBottom:20}}>
     <div style={{textAlign:"center",paddingBottom:20,borderBottom:"1px solid #1e1e1e",marginBottom:16}}>
@@ -462,8 +528,9 @@ function ProfileView({user,posts,isOwn,onSignOut,onReview,onChat,styles:S,timeAg
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
           <span>{p.drink}</span><span style={{color:"#555",fontSize:12,marginLeft:"auto"}}>{timeAgo(p.createdAt)}</span>
         </div>
-        <div style={{color:"#bbb",fontSize:14,lineHeight:1.5}}>{p.text}</div>
-        <div style={{color:"#888",fontSize:12,marginTop:4}}>🍻 {(p.likes||[]).length} cheers · 💬 {p.commentCount||0}</div>
+        {p.text&&<div style={{color:"#bbb",fontSize:14,lineHeight:1.5,marginBottom:p.imageUrl?8:0}}>{p.text}</div>}
+        {p.imageUrl&&<img src={p.imageUrl} alt="" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:8,cursor:"pointer"}} onClick={()=>onLightbox&&onLightbox(p.imageUrl)}/>}
+        <div style={{color:"#888",fontSize:12,marginTop:6}}>🍻 {(p.likes||[]).length} cheers · 💬 {p.commentCount||0}</div>
       </div>))}
     </div>}
   </div>);
