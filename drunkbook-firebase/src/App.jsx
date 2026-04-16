@@ -5,7 +5,7 @@ import {
 } from "firebase/auth";
 import {
   doc, setDoc, getDoc, collection, addDoc, onSnapshot,
-  query, orderBy, updateDoc, serverTimestamp, where
+  query, orderBy, updateDoc, serverTimestamp, where, deleteDoc
 } from "firebase/firestore";
 
 const DRINKS = ["🍺","🍻","🥃","🍷","🍸","🍹","🥂","🍾"];
@@ -207,6 +207,7 @@ export default function App() {
   const [searchQuery,setSearchQuery]=useState("");
   const [globalSearch,setGlobalSearch]=useState("");
   const [showGlobalSearch,setShowGlobalSearch]=useState(false);
+  const [confirmDelete,setConfirmDelete]=useState(null);
   const messagesEndRef=useRef(null);
   const commentInputRef=useRef(null);
   const fileInputRef=useRef(null);
@@ -271,9 +272,7 @@ export default function App() {
     return()=>clearInterval(interval);
   },[authUser,screen]);
 
-  useEffect(()=>{
-    if(showGlobalSearch)setTimeout(()=>searchRef.current?.focus(),100);
-  },[showGlobalSearch]);
+  useEffect(()=>{if(showGlobalSearch)setTimeout(()=>searchRef.current?.focus(),100);},[showGlobalSearch]);
 
   function showToast(msg){setToast(msg);setTimeout(()=>setToast(null),2800);}
 
@@ -327,6 +326,12 @@ export default function App() {
 
   async function toggleLike(postId,likes){const uid=authUser.uid;await updateDoc(doc(db,"posts",postId),{likes:likes.includes(uid)?likes.filter(l=>l!==uid):[...likes,uid]});}
 
+  async function deletePost(postId){
+    await deleteDoc(doc(db,"posts",postId));
+    setConfirmDelete(null);
+    showToast("Postare ștearsă! 🗑️");
+  }
+
   async function submitComment(postId){
     if(!newComment.trim())return;
     await addDoc(collection(db,"posts",postId,"comments"),{userId:authUser.uid,userName:profile.name,userEmoji:profile.emoji,text:newComment,createdAt:serverTimestamp()});
@@ -367,19 +372,8 @@ export default function App() {
   const myStats=leaderboard.find(u=>u.id===authUser?.uid);
   const myRank=leaderboard.findIndex(u=>u.id===authUser?.uid)+1;
   const nearbyUsers=allUsers.filter(u=>u.id!==authUser?.uid&&u.lat&&geo&&distKm(geo.lat,geo.lon,u.lat,u.lon)<=radius);
-
-  // Search results
-  const searchResults = globalSearch.trim() ? allUsers.filter(u=>
-    u.name?.toLowerCase().includes(globalSearch.toLowerCase()) ||
-    u.drink?.toLowerCase().includes(globalSearch.toLowerCase()) ||
-    u.bio?.toLowerCase().includes(globalSearch.toLowerCase())
-  ) : [];
-
-  const filteredUsers = allUsers.filter(u=>u.id!==authUser?.uid).filter(u=>
-    !searchQuery ||
-    u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.drink?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const searchResults=globalSearch.trim()?allUsers.filter(u=>u.name?.toLowerCase().includes(globalSearch.toLowerCase())||u.drink?.toLowerCase().includes(globalSearch.toLowerCase())||u.bio?.toLowerCase().includes(globalSearch.toLowerCase())):[];
+  const filteredUsers=allUsers.filter(u=>u.id!==authUser?.uid).filter(u=>!searchQuery||u.name?.toLowerCase().includes(searchQuery.toLowerCase())||u.drink?.toLowerCase().includes(searchQuery.toLowerCase()));
 
   if(screen==="splash")return(<div style={S.splash}><div style={S.splashGlow}/><div style={{textAlign:"center",zIndex:1}}><div style={{fontSize:72,marginBottom:12}}>🍺</div><div style={S.splashTitle}>DRUNKBOOK</div><div style={{color:"#888",fontSize:13,marginTop:8,letterSpacing:2}}>Rețeaua Socială a Celor Însetați</div><div style={S.splashLoader}><div style={S.splashBar}/></div></div></div>);
   if(loading)return(<div style={{...S.splash}}><div style={{fontSize:40}}>🍺</div><div style={{color:"#f5a623",marginTop:12}}>Se încarcă...</div></div>);
@@ -414,33 +408,37 @@ export default function App() {
       {lightboxImg&&(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setLightboxImg(null)}><img src={lightboxImg} alt="" style={{maxWidth:"95vw",maxHeight:"90vh",borderRadius:12,objectFit:"contain"}}/><button style={{position:"absolute",top:20,right:20,background:"#2a2a2a",border:"none",color:"#fff",width:36,height:36,borderRadius:"50%",fontSize:18,cursor:"pointer"}}>✕</button></div>)}
       {badgeTooltip&&(<div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"#1a1a1a",border:"1px solid #f5a623",borderRadius:16,padding:20,zIndex:400,textAlign:"center",minWidth:200}} onClick={()=>setBadgeTooltip(null)}><div style={{fontSize:48,marginBottom:8}}>{badgeTooltip.icon}</div><div style={{fontWeight:700,color:"#f5a623",fontSize:16,marginBottom:6}}>{badgeTooltip.name}</div><div style={{color:"#aaa",fontSize:13}}>{badgeTooltip.desc}</div><div style={{color:"#666",fontSize:11,marginTop:12}}>Apasă pentru a închide</div></div>)}
 
-      {/* Global Search Overlay */}
-      {showGlobalSearch&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:300,padding:20}} onClick={()=>{setShowGlobalSearch(false);setGlobalSearch("");}}>
-          <div onClick={e=>e.stopPropagation()}>
-            <div style={{display:"flex",gap:10,marginBottom:16,marginTop:50}}>
-              <input ref={searchRef} style={{...S.input,flex:1,fontSize:18,padding:"14px 16px"}} placeholder="🔍 Caută useri..." value={globalSearch} onChange={e=>setGlobalSearch(e.target.value)} autoFocus/>
-              <button style={{background:"#2a2a2a",border:"none",borderRadius:10,padding:"14px 16px",color:"#888",cursor:"pointer",fontSize:16}} onClick={()=>{setShowGlobalSearch(false);setGlobalSearch("");}}>✕</button>
-            </div>
-            {globalSearch&&searchResults.length===0&&<div style={{textAlign:"center",color:"#666",fontSize:16,marginTop:40,fontStyle:"italic"}}>Niciun utilizator găsit 🍺</div>}
-            {searchResults.map(u=>(
-              <div key={u.id} style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:14,marginBottom:10,display:"flex",alignItems:"center",gap:12,cursor:"pointer"}} onClick={()=>{setViewProfile(u);setShowGlobalSearch(false);setGlobalSearch("");}}>
-                <span style={{fontSize:32}}>{u.emoji}</span>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:700,fontSize:16,color:"#f5a623"}}>{u.name}</div>
-                  <div style={{color:"#888",fontSize:13}}>{u.drink}</div>
-                  {u.bio&&<div style={{color:"#666",fontSize:12,marginTop:2,fontStyle:"italic"}}>{u.bio.slice(0,50)}{u.bio.length>50?"...":""}</div>}
-                </div>
-                <div style={{textAlign:"right"}}>
-                  <div style={{color:"#f5a623",fontSize:13}}>{"★".repeat(Math.round(u.avgRating||0))}</div>
-                  <div style={{color:"#888",fontSize:11}}>{u.totalRatings||0} recenzii</div>
-                </div>
-              </div>
-            ))}
-            {!globalSearch&&<div style={{textAlign:"center",color:"#555",fontSize:14,marginTop:60,fontStyle:"italic"}}>Scrie un nume sau o băutură...</div>}
-          </div>
+      {/* Confirm Delete Modal */}
+      {confirmDelete&&(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><div style={{background:"#1a1a1a",border:"1px solid #e87070",borderRadius:16,padding:24,maxWidth:300,width:"100%",textAlign:"center"}}>
+        <div style={{fontSize:36,marginBottom:12}}>🗑️</div>
+        <div style={{fontWeight:700,fontSize:16,marginBottom:8}}>Ștergi postarea?</div>
+        <div style={{color:"#888",fontSize:13,marginBottom:20}}>Această acțiune nu poate fi anulată.</div>
+        <div style={{display:"flex",gap:10}}>
+          <button style={{flex:1,background:"#2a2a2a",border:"none",borderRadius:10,padding:"12px",color:"#ccc",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:14}} onClick={()=>setConfirmDelete(null)}>Anulează</button>
+          <button style={{flex:1,background:"#e87070",border:"none",borderRadius:10,padding:"12px",color:"#fff",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:14,fontWeight:700}} onClick={()=>deletePost(confirmDelete)}>Șterge</button>
         </div>
-      )}
+      </div></div>)}
+
+      {/* Global Search */}
+      {showGlobalSearch&&(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:300,padding:20}} onClick={()=>{setShowGlobalSearch(false);setGlobalSearch("");}}>
+        <div onClick={e=>e.stopPropagation()}>
+          <div style={{display:"flex",gap:10,marginBottom:16,marginTop:50}}>
+            <input ref={searchRef} style={{...S.input,flex:1,fontSize:18,padding:"14px 16px"}} placeholder="🔍 Caută useri..." value={globalSearch} onChange={e=>setGlobalSearch(e.target.value)} autoFocus/>
+            <button style={{background:"#2a2a2a",border:"none",borderRadius:10,padding:"14px 16px",color:"#888",cursor:"pointer",fontSize:16}} onClick={()=>{setShowGlobalSearch(false);setGlobalSearch("");}}>✕</button>
+          </div>
+          {globalSearch&&searchResults.length===0&&<div style={{textAlign:"center",color:"#666",fontSize:16,marginTop:40,fontStyle:"italic"}}>Niciun utilizator găsit 🍺</div>}
+          {searchResults.map(u=>(<div key={u.id} style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:14,marginBottom:10,display:"flex",alignItems:"center",gap:12,cursor:"pointer"}} onClick={()=>{setViewProfile(u);setShowGlobalSearch(false);setGlobalSearch("");}}>
+            <span style={{fontSize:32}}>{u.emoji}</span>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:16,color:"#f5a623"}}>{u.name}</div>
+              <div style={{color:"#888",fontSize:13}}>{u.drink}</div>
+              {u.bio&&<div style={{color:"#666",fontSize:12,marginTop:2,fontStyle:"italic"}}>{u.bio.slice(0,50)}{u.bio.length>50?"...":""}</div>}
+            </div>
+            <div style={{textAlign:"right"}}><div style={{color:"#f5a623",fontSize:13}}>{"★".repeat(Math.round(u.avgRating||0))}</div><div style={{color:"#888",fontSize:11}}>{u.totalRatings||0} recenzii</div></div>
+          </div>))}
+          {!globalSearch&&<div style={{textAlign:"center",color:"#555",fontSize:14,marginTop:60,fontStyle:"italic"}}>Scrie un nume sau o băutură...</div>}
+        </div>
+      </div>)}
 
       <div style={S.header}>
         <span style={{fontWeight:900,fontSize:18,letterSpacing:3,color:"#f5a623"}}>🍺 DRUNKBOOK</span>
@@ -451,7 +449,6 @@ export default function App() {
       </div>
 
       <div style={S.content}>
-
         {tab==="feed"&&(<div>
           <div style={S.composer}>
             <div style={{display:"flex",gap:10,marginBottom:10}}><span style={{fontSize:28}}>{profile?.emoji}</span><textarea style={S.composerInput} placeholder="Ce bei și ce gândești?" value={newPost} onChange={e=>setNewPost(e.target.value)} rows={2}/></div>
@@ -465,12 +462,14 @@ export default function App() {
               <button style={{...S.postBtn,opacity:uploadingPost?0.6:1}} onClick={submitPost} disabled={uploadingPost}>{uploadingPost?"Se încarcă...":"Postează"}</button>
             </div>
           </div>
+
           {posts.map(post=>(
             <div key={post.id} style={S.postCard}>
               <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:10}}>
                 <button style={S.postAvatar} onClick={()=>{const u=allUsers.find(u=>u.id===post.userId);if(u)setViewProfile(u);}}>{post.userEmoji}</button>
                 <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:"#f5a623"}}>{post.userName}</div><div style={{color:"#666",fontSize:12}}>{post.drink} · {timeAgo(post.createdAt)}</div></div>
                 {post.userId!==authUser.uid&&<button style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:"4px 8px"}} onClick={()=>{const u=allUsers.find(u=>u.id===post.userId);if(u)openChat(u);}}>💬</button>}
+                {post.userId===authUser.uid&&<button style={{background:"none",border:"none",cursor:"pointer",fontSize:16,padding:"4px 8px",color:"#666"}} onClick={()=>setConfirmDelete(post.id)}>🗑️</button>}
               </div>
               {post.text&&<div style={{fontSize:15,lineHeight:1.6,color:"#ddd",marginBottom:post.imageUrl?10:12}}>{post.text}</div>}
               {post.imageUrl&&(<div style={{marginBottom:12,cursor:"pointer"}} onClick={()=>setLightboxImg(post.imageUrl)}><img src={post.imageUrl} alt="" style={{width:"100%",maxHeight:300,objectFit:"cover",borderRadius:10}}/></div>)}
@@ -563,16 +562,10 @@ export default function App() {
         {tab==="messages"&&!chatWith&&(<div>
           <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Conversații</div>
           {conversations.map(conv=>{const otherId=conv.participants.find(p=>p!==authUser.uid);const otherName=conv.participantNames?.[otherId]||"Utilizator";const otherEmoji=conv.participantEmojis?.[otherId]||"🍺";const isUnread=conv.lastSenderId!==authUser.uid&&!(conv.readBy||[]).includes(authUser.uid);const otherUser=allUsers.find(u=>u.id===otherId);return(<div key={conv.id} style={{...S.postCard,cursor:"pointer",borderColor:isUnread?"#f5a623":"#242424"}} onClick={()=>otherUser&&setChatWith(otherUser)}><div style={{display:"flex",gap:12,alignItems:"center"}}><span style={{fontSize:32}}>{otherEmoji}</span><div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,color:isUnread?"#f5a623":"#e8e0d0"}}>{otherName}</div><div style={{color:"#888",fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{conv.lastMessage}</div></div><div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}><span style={{color:"#555",fontSize:11}}>{timeAgo(conv.lastMessageAt)}</span>{isUnread&&<span style={{background:"#f5a623",color:"#111",borderRadius:10,padding:"2px 7px",fontSize:11,fontWeight:700}}>nou</span>}</div></div></div>);})}
-
-          {/* Search in messages */}
           <div style={{marginTop:20}}>
             <input style={{...S.input,marginBottom:12}} placeholder="🔍 Caută după nume sau băutură..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
             <div style={{color:"#888",fontSize:13,marginBottom:10}}>{searchQuery?`Rezultate pentru "${searchQuery}":`:"Toți utilizatorii:"}</div>
-            {filteredUsers.map(u=>(<div key={u.id} style={{...S.nearbyCard,cursor:"pointer"}} onClick={()=>setChatWith(u)}>
-              <span style={{fontSize:28}}>{u.emoji}</span>
-              <div style={{flex:1}}><div style={{fontWeight:700,fontSize:14}}>{u.name}</div><div style={{color:"#888",fontSize:12}}>{u.drink}</div></div>
-              <button style={{...S.btnSmall,background:"#1a3a2a",color:"#4caf82",border:"1px solid #4caf82"}}>💬 Chat</button>
-            </div>))}
+            {filteredUsers.map(u=>(<div key={u.id} style={{...S.nearbyCard,cursor:"pointer"}} onClick={()=>setChatWith(u)}><span style={{fontSize:28}}>{u.emoji}</span><div style={{flex:1}}><div style={{fontWeight:700,fontSize:14}}>{u.name}</div><div style={{color:"#888",fontSize:12}}>{u.drink}</div></div><button style={{...S.btnSmall,background:"#1a3a2a",color:"#4caf82",border:"1px solid #4caf82"}}>💬 Chat</button></div>))}
             {filteredUsers.length===0&&<div style={{color:"#666",fontSize:14,fontStyle:"italic",textAlign:"center",marginTop:20}}>Niciun utilizator găsit 🍺</div>}
           </div>
         </div>)}
