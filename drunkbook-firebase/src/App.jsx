@@ -54,7 +54,16 @@ export default function App() {
   const commentInputRef=useRef(null);
 
   useEffect(()=>{const t=setTimeout(()=>setScreen("auth"),2200);return()=>clearTimeout(t);},[]);
-
+// Check if already logged in on mount
+useEffect(()=>{
+    if(auth.currentUser){
+      getDoc(doc(db,"users",auth.currentUser.uid)).then(snap=>{
+        if(snap.exists()){setProfile(snap.data());setScreen("app");}
+        else{setScreen("setup");}
+        setLoading(false);
+      });
+    }
+  },[]);
   useEffect(()=>{
     const unsub=onAuthStateChanged(auth,async(user)=>{
       try {
@@ -118,11 +127,21 @@ export default function App() {
 
   function showToast(msg){setToast(msg);setTimeout(()=>setToast(null),2800);}
 
-  async function handleAuth(){
+ async function handleAuth(){
     setAuthError("");
     try{
-      if(authMode==="register")await createUserWithEmailAndPassword(auth,email,password);
-      else await signInWithEmailAndPassword(auth,email,password);
+      let user;
+      if(authMode==="register"){
+        const cred = await createUserWithEmailAndPassword(auth,email,password);
+        user = cred.user;
+      } else {
+        const cred = await signInWithEmailAndPassword(auth,email,password);
+        user = cred.user;
+      }
+      // Manual redirect after login
+      const snap = await getDoc(doc(db,"users",user.uid));
+      if(snap.exists()){setProfile(snap.data());setScreen("app");}
+      else{setScreen("setup");setSetupStep(0);}
     }catch(e){
       const msgs={"auth/email-already-in-use":"Email deja folosit!","auth/weak-password":"Parola prea slabă (min 6 caractere)","auth/invalid-email":"Email invalid","auth/invalid-credential":"Email sau parolă greșită"};
       setAuthError(msgs[e.code]||e.message);
