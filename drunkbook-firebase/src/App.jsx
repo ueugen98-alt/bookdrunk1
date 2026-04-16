@@ -57,17 +57,23 @@ export default function App() {
 
   useEffect(()=>{
     const unsub=onAuthStateChanged(auth,async(user)=>{
-      setAuthUser(user);
-      if(user){
-        const snap=await getDoc(doc(db,"users",user.uid));
-        if(snap.exists()){setProfile(snap.data());setScreen("app");}
-        else{setScreen("setup");setSetupStep(0);}
-      }else{setProfile(null);setScreen("auth");}
-      setLoading(false);
+      try {
+        setAuthUser(user);
+        if(user){
+          const snap=await getDoc(doc(db,"users",user.uid));
+          if(snap.exists()){setProfile(snap.data());setScreen("app");}
+          else{setScreen("setup");setSetupStep(0);}
+        }else{setProfile(null);setScreen("auth");}
+      } catch(e) {
+        console.error("Auth error:", e);
+        setProfile(null);
+        setScreen("auth");
+      } finally {
+        setLoading(false);
+      }
     });
     return unsub;
   },[]);
-
   useEffect(()=>{
     if(screen!=="app")return;
     const q=query(collection(db,"posts"),orderBy("createdAt","desc"));
