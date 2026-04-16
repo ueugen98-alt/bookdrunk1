@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { auth, db, messaging, requestNotificationPermission, onMessage } from "./firebase";
+import { auth, db, requestNotificationPermission, onMessage } from "./firebase";
+import { getMessaging } from "firebase/messaging";
+import { getApp } from "firebase/app";
+
+let messaging = null;
+try { messaging = getMessaging(getApp()); } catch(e) {}
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
 } from "firebase/auth";
