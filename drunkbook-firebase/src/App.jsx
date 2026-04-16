@@ -19,7 +19,6 @@ const BADGE_DEFS = [
   { id:"chatterbox",icon:"💬", name:"Gura Satului",    desc:"20+ comentarii scrise" },
   { id:"vip",       icon:"⭐", name:"VIP",             desc:"Rating mediu peste 4.5 stele" },
   { id:"explorer",  icon:"📍", name:"Explorer",        desc:"Locație activată" },
-  { id:"socialite", icon:"👥", name:"Sociabil",        desc:"A trimis 10+ mesaje" },
   { id:"critic",    icon:"🎭", name:"Critic de Bar",   desc:"A scris 5+ recenzii" },
 ];
 
@@ -31,8 +30,7 @@ function computeBadges(user, posts, allUsers) {
   const weekAgo = Date.now() - 7*24*3600*1000;
   const recentPosts = userPosts.filter(p => p.createdAt?.seconds*1000 > weekAgo);
   const accountAge = user.createdAt?.seconds ? (Date.now() - user.createdAt.seconds*1000) : 0;
-  const maxLikes = Math.max(...allUsers.map(u => posts.filter(p=>p.userId===u.id||p.userId===u.uid).reduce((s,p)=>s+(p.likes||[]).length,0)));
-
+  const maxLikes = Math.max(0, ...allUsers.map(u => posts.filter(p=>p.userId===u.id||p.userId===u.uid).reduce((s,p)=>s+(p.likes||[]).length,0)));
   if (accountAge > 7*24*3600*1000) badges.push("veteran");
   if (totalLikes > 0 && totalLikes >= maxLikes && allUsers.length > 1) badges.push("popular");
   if (recentPosts.length >= 5) badges.push("onfire");
@@ -51,6 +49,191 @@ function setCookie(n,v,d=365){document.cookie=`${n}=${encodeURIComponent(v)};pat
 function getCookie(n){return decodeURIComponent(document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith(n+'='))?.split('=')[1]||'');}
 function deleteCookie(n){document.cookie=`${n}=;path=/;max-age=0`;}
 async function uploadToImgbb(file){const fd=new FormData();fd.append('image',file);const r=await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`,{method:'POST',body:fd});const d=await r.json();if(d.success)return d.data.url;throw new Error('Upload failed');}
+
+// Leaflet Map Component
+function LiveMap({ allUsers, currentUser, geo, onUserClick, onCheckin }) {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markersRef = useRef({});
+  const [leafletLoaded, setLeafletLoaded] = useState(false);
+  const [checkinName, setCheckinName] = useState("");
+  const [showCheckin, setShowCheckin] = useState(false);
+
+  useEffect(() => {
+    // Load Leaflet CSS
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    // Load Leaflet JS
+    if (!window.L) {
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.onload = () => setLeafletLoaded(true);
+      document.head.appendChild(script);
+    } else {
+      setLeafletLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!leafletLoaded || !mapRef.current || mapInstanceRef.current) return;
+    const center = geo ? [geo.lat, geo.lon] : [44.4268, 26.1025];
+    const map = window.L.map(mapRef.current, { zoomControl: true, attributionControl: false }).setView(center, 13);
+    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+    }).addTo(map);
+    mapInstanceRef.current = map;
+  }, [leafletLoaded, geo]);
+
+  useEffect(() => {
+    if (!mapInstanceRef.current || !window.L) return;
+    const map = mapInstanceRef.current;
+    const twoHoursAgo = Date.now() - 2*3600*1000;
+
+    // Clear old markers
+    Object.values(markersRef.current).forEach(m => map.removeLayer(m));
+    markersRef.current = {};
+
+    // Add markers for all users with location
+    allUsers.filter(u => u.lat && u.lon).forEach(u => {
+      const isActive = u.lastSeen?.seconds ? (u.lastSeen.seconds*1000 > twoHoursAgo) : false;
+      const isMe = u.id === currentUser?.uid;
+      const size = isMe ? 44 : isActive ? 38 : 32;
+      const checkedIn = u.checkinName ? `<br/><span style="font-size:10px;color:#f5a623">📍 ${u.checkinName}</span>` : '';
+
+      const icon = window.L.divIcon({
+        html: `<div style="
+          width:${size}px;height:${size}px;
+          border-radius:50%;
+          background:${isMe?'#f5a623':isActive?'#2a2a2a':'#1a1a1a'};
+          border:${isMe?'3px solid #fff':isActive?'2px solid #f5a623':'2px solid #444'};
+          display:flex;align-items:center;justify-content:center;
+          font-size:${isMe?22:isActive?18:16}px;
+          box-shadow:${isMe?'0 0 12px rgba(245,166,35,0.8)':isActive?'0 0 8px rgba(245,166,35,0.4)':'none'};
+          cursor:pointer;
+        ">${u.emoji}</div>`,
+        className: '',
+        iconSize: [size, size],
+        iconAnchor: [size/2, size/2],
+      });
+
+      const marker = window.L.marker([u.lat, u.lon], { icon })
+        .addTo(map)
+        .bindPopup(`
+          <div style="font-family:Georgia,serif;text-align:center;min-width:120px">
+            <div style="font-size:28px">${u.emoji}</div>
+            <div style="font-weight:700;color:#f5a623;font-size:14px">${u.name}</div>
+            <div style="color:#888;font-size:11px">${u.drink}</div>
+            ${checkedIn}
+            <div style="color:#aaa;font-size:10px;margin-top:4px">${isActive?'🟢 Activ recent':'⚫ Inactiv'}</div>
+            ${!isMe?`<button onclick="window._dbUserClick('${u.id}')" style="margin-top:8px;background:#f5a623;border:none;border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer;font-family:Georgia,serif">Vezi Profil</button>`:''}
+          </div>
+        `);
+
+      marker.on('click', () => {
+        if (!isMe) onUserClick(u);
+      });
+
+      markersRef.current[u.id] = marker;
+    });
+
+    // Global click handler for popup buttons
+    window._dbUserClick = (userId) => {
+      const user = allUsers.find(u => u.id === userId);
+      if (user) onUserClick(user);
+    };
+  }, [allUsers, currentUser, leafletLoaded]);
+
+  // Center map on user location
+  useEffect(() => {
+    if (geo && mapInstanceRef.current) {
+      mapInstanceRef.current.setView([geo.lat, geo.lon], 14);
+    }
+  }, [geo]);
+
+  async function handleCheckin() {
+    if (!checkinName.trim() || !currentUser) return;
+    await updateDoc(doc(db, "users", currentUser.uid), {
+      checkinName: checkinName,
+      checkinTime: serverTimestamp(),
+      lastSeen: serverTimestamp(),
+    });
+    setCheckinName("");
+    setShowCheckin(false);
+  }
+
+  async function handleCheckout() {
+    if (!currentUser) return;
+    await updateDoc(doc(db, "users", currentUser.uid), {
+      checkinName: null,
+      checkinTime: null,
+    });
+  }
+
+  const myUser = allUsers.find(u => u.id === currentUser?.uid);
+
+  return (
+    <div>
+      {/* Check-in bar */}
+      <div style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:12,marginBottom:12}}>
+        {myUser?.checkinName ? (
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:20}}>📍</span>
+            <div style={{flex:1}}>
+              <div style={{color:"#f5a623",fontWeight:700,fontSize:14}}>Check-in: {myUser.checkinName}</div>
+              <div style={{color:"#888",fontSize:12}}>Ești vizibil pe hartă</div>
+            </div>
+            <button style={{background:"#e87070",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif"}} onClick={handleCheckout}>Check-out</button>
+          </div>
+        ) : showCheckin ? (
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <input style={{...{width:"100%",boxSizing:"border-box",background:"#1a1a1a",border:"1px solid #333",borderRadius:10,padding:"10px 14px",color:"#e8e0d0",fontSize:15,fontFamily:"Georgia,serif",outline:"none"},flex:1,padding:"8px 12px"}} placeholder="Numele barului..." value={checkinName} onChange={e=>setCheckinName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleCheckin()} autoFocus/>
+            <button style={{background:"#f5a623",border:"none",borderRadius:8,padding:"8px 14px",color:"#111",fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif"}} onClick={handleCheckin}>✓</button>
+            <button style={{background:"#2a2a2a",border:"none",borderRadius:8,padding:"8px 10px",color:"#888",cursor:"pointer"}} onClick={()=>setShowCheckin(false)}>✕</button>
+          </div>
+        ) : (
+          <button style={{background:"none",border:"1px dashed #444",borderRadius:10,padding:"10px",width:"100%",color:"#888",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>setShowCheckin(true)}>
+            📍 Check-in la un bar
+          </button>
+        )}
+      </div>
+
+      {/* Map */}
+      {!leafletLoaded && <div style={{height:400,background:"#171717",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center",color:"#888"}}>Se încarcă harta... 🗺️</div>}
+      <div ref={mapRef} style={{height:420,borderRadius:14,overflow:"hidden",display:leafletLoaded?"block":"none"}}/>
+
+      {/* Legend */}
+      <div style={{display:"flex",gap:12,marginTop:10,flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,color:"#888",fontSize:12}}><div style={{width:12,height:12,borderRadius:"50%",background:"#f5a623",border:"2px solid #fff"}}/> Tu</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,color:"#888",fontSize:12}}><div style={{width:12,height:12,borderRadius:"50%",background:"#2a2a2a",border:"2px solid #f5a623"}}/> Activ recent</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,color:"#888",fontSize:12}}><div style={{width:12,height:12,borderRadius:"50%",background:"#1a1a1a",border:"2px solid #444"}}/> Inactiv</div>
+      </div>
+
+      {/* Active users list */}
+      <div style={{marginTop:16}}>
+        <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
+          Pe Hartă ({allUsers.filter(u=>u.lat&&u.lon).length})
+        </div>
+        {allUsers.filter(u=>u.lat&&u.lon).map(u=>(
+          <div key={u.id} style={{background:"#171717",border:"1px solid #242424",borderRadius:12,padding:10,marginBottom:8,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>onUserClick(u)}>
+            <span style={{fontSize:24}}>{u.emoji}</span>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:14,color:u.id===currentUser?.uid?"#f5a623":"#e8e0d0"}}>{u.name} {u.id===currentUser?.uid&&"(tu)"}</div>
+              {u.checkinName&&<div style={{color:"#f5a623",fontSize:12}}>📍 {u.checkinName}</div>}
+              {!u.checkinName&&<div style={{color:"#666",fontSize:12}}>Locație activă</div>}
+            </div>
+            {u.id!==currentUser?.uid&&<div style={{width:8,height:8,borderRadius:"50%",background: u.lastSeen?.seconds&&(Date.now()-u.lastSeen.seconds*1000)<7200000?"#4caf82":"#555"}}/>}
+          </div>
+        ))}
+        {allUsers.filter(u=>u.lat&&u.lon).length===0&&<div style={{textAlign:"center",color:"#666",fontSize:14,fontStyle:"italic",marginTop:20}}>Nimeni nu are locația activată încă.</div>}
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [authUser,setAuthUser]=useState(null);
@@ -145,6 +328,15 @@ export default function App() {
     return onSnapshot(q,snap=>{setComments(c=>({...c,[openComments]:snap.docs.map(d=>({id:d.id,...d.data()}))}));});
   },[openComments]);
 
+  // Update lastSeen periodically
+  useEffect(()=>{
+    if(!authUser||screen!=="app")return;
+    const update=()=>updateDoc(doc(db,"users",authUser.uid),{lastSeen:serverTimestamp()}).catch(()=>{});
+    update();
+    const interval=setInterval(update,5*60*1000);
+    return()=>clearInterval(interval);
+  },[authUser,screen]);
+
   function showToast(msg){setToast(msg);setTimeout(()=>setToast(null),2800);}
 
   async function handleAuth(){
@@ -176,7 +368,7 @@ export default function App() {
     navigator.geolocation.getCurrentPosition(async(pos)=>{
       const{latitude:lat,longitude:lon}=pos.coords;
       setGeo({lat,lon});
-      if(authUser){await updateDoc(doc(db,"users",authUser.uid),{lat,lon});setProfile(p=>({...p,lat,lon}));}
+      if(authUser){await updateDoc(doc(db,"users",authUser.uid),{lat,lon,lastSeen:serverTimestamp()});setProfile(p=>({...p,lat,lon}));}
     },()=>setGeoError("Nu ai dat acces la locație."));
   }
 
@@ -224,18 +416,18 @@ export default function App() {
   function openChat(user){setChatWith(user);setViewProfile(null);setTab("messages");}
   async function handleSignOut(){deleteCookie('db_email');deleteCookie('db_pass');await signOut(auth);setScreen("auth");setProfile(null);setAuthUser(null);}
 
-  const leaderboard = allUsers.map(u => {
-    const uPosts = posts.filter(p=>p.userId===u.id);
-    const totalLikes = uPosts.reduce((s,p)=>s+(p.likes||[]).length,0);
-    const totalPosts = uPosts.length;
-    const totalComments = uPosts.reduce((s,p)=>s+(p.commentCount||0),0);
-    const score = totalLikes*3 + totalPosts*2 + totalComments + (u.totalRatings||0)*2;
-    const badges = computeBadges({...u,id:u.id}, posts, allUsers);
-    return {...u, totalLikes, totalPosts, totalComments, score, badges};
+  const leaderboard=allUsers.map(u=>{
+    const uPosts=posts.filter(p=>p.userId===u.id);
+    const totalLikes=uPosts.reduce((s,p)=>s+(p.likes||[]).length,0);
+    const totalPosts=uPosts.length;
+    const totalComments=uPosts.reduce((s,p)=>s+(p.commentCount||0),0);
+    const score=totalLikes*3+totalPosts*2+totalComments+(u.totalRatings||0)*2;
+    const badges=computeBadges({...u,id:u.id},posts,allUsers);
+    return{...u,totalLikes,totalPosts,totalComments,score,badges};
   }).sort((a,b)=>b.score-a.score);
 
-  const myStats = leaderboard.find(u=>u.id===authUser?.uid);
-  const myRank = leaderboard.findIndex(u=>u.id===authUser?.uid)+1;
+  const myStats=leaderboard.find(u=>u.id===authUser?.uid);
+  const myRank=leaderboard.findIndex(u=>u.id===authUser?.uid)+1;
   const nearbyUsers=allUsers.filter(u=>u.id!==authUser?.uid&&u.lat&&geo&&distKm(geo.lat,geo.lon,u.lat,u.lon)<=radius);
 
   if(screen==="splash")return(<div style={S.splash}><div style={S.splashGlow}/><div style={{textAlign:"center",zIndex:1}}><div style={{fontSize:72,marginBottom:12}}>🍺</div><div style={S.splashTitle}>DRUNKBOOK</div><div style={{color:"#888",fontSize:13,marginTop:8,letterSpacing:2}}>Rețeaua Socială a Celor Însetați</div><div style={S.splashLoader}><div style={S.splashBar}/></div></div></div>);
@@ -246,10 +438,7 @@ export default function App() {
       <div style={{fontSize:56,textAlign:"center"}}>🍺</div>
       <div style={S.splashTitle}>DRUNKBOOK</div>
       <div style={{textAlign:"center",color:"#888",fontSize:13,fontStyle:"italic",marginBottom:8}}>Unde toți se cunosc și nimeni nu-și amintește</div>
-      <div style={S.authTabs}>
-        <button style={{...S.authTab,...(authMode==="login"?S.authTabActive:{})}} onClick={()=>setAuthMode("login")}>Intră</button>
-        <button style={{...S.authTab,...(authMode==="register"?S.authTabActive:{})}} onClick={()=>setAuthMode("register")}>Cont Nou</button>
-      </div>
+      <div style={S.authTabs}><button style={{...S.authTab,...(authMode==="login"?S.authTabActive:{})}} onClick={()=>setAuthMode("login")}>Intră</button><button style={{...S.authTab,...(authMode==="register"?S.authTabActive:{})}} onClick={()=>setAuthMode("register")}>Cont Nou</button></div>
       <input style={S.input} type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}/>
       <input style={S.input} type="password" placeholder="Parolă (min 6 caractere)" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAuth()}/>
       {authError&&<div style={{color:"#e87070",fontSize:13,textAlign:"center"}}>{authError}</div>}
@@ -259,10 +448,7 @@ export default function App() {
 
   if(screen==="setup")return(
     <div style={S.root}><div style={S.loginWrap}>
-      <div style={S.setupHeader}>
-        <button style={S.backBtn} onClick={()=>setupStep>0&&setSetupStep(s=>s-1)}>←</button>
-        <span style={{color:"#888",fontSize:13}}>Pas {setupStep+1} / 4</span>
-      </div>
+      <div style={S.setupHeader}><button style={S.backBtn} onClick={()=>setupStep>0&&setSetupStep(s=>s-1)}>←</button><span style={{color:"#888",fontSize:13}}>Pas {setupStep+1} / 4</span></div>
       {setupStep===0&&<><div style={S.setupQ}>Cum te cheamă, bețivule?</div><input style={S.input} placeholder="Numele tău de bar..." value={setupData.name} onChange={e=>setSetupData(d=>({...d,name:e.target.value}))} autoFocus/></>}
       {setupStep===1&&<><div style={S.setupQ}>Alege-ți emoji-ul</div><div style={S.emojiGrid}>{DRINKS.map(e=><button key={e} style={{...S.emojiBtn,...(setupData.emoji===e?S.emojiBtnActive:{})}} onClick={()=>setSetupData(d=>({...d,emoji:e}))}>{e}</button>)}</div></>}
       {setupStep===2&&<><div style={S.setupQ}>Băutura ta favorită?</div><input style={S.input} placeholder="ex: Bere, Whisky, Vin roșu..." value={setupData.drink} onChange={e=>setSetupData(d=>({...d,drink:e.target.value}))} autoFocus/></>}
@@ -283,12 +469,11 @@ export default function App() {
       </div>
 
       <div style={S.content}>
+
+        {/* FEED */}
         {tab==="feed"&&(<div>
           <div style={S.composer}>
-            <div style={{display:"flex",gap:10,marginBottom:10}}>
-              <span style={{fontSize:28}}>{profile?.emoji}</span>
-              <textarea style={S.composerInput} placeholder="Ce bei și ce gândești?" value={newPost} onChange={e=>setNewPost(e.target.value)} rows={2}/>
-            </div>
+            <div style={{display:"flex",gap:10,marginBottom:10}}><span style={{fontSize:28}}>{profile?.emoji}</span><textarea style={S.composerInput} placeholder="Ce bei și ce gândești?" value={newPost} onChange={e=>setNewPost(e.target.value)} rows={2}/></div>
             {postImagePreview&&(<div style={{position:"relative",marginBottom:10}}><img src={postImagePreview} alt="" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:10}}/><button onClick={removeImage} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.7)",border:"none",color:"#fff",width:28,height:28,borderRadius:"50%",cursor:"pointer",fontSize:14}}>✕</button></div>)}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
@@ -328,6 +513,26 @@ export default function App() {
           {posts.length===0&&<div style={S.emptyState}>🍺 Nicio postare încă.<br/>Fii primul care scrie ceva!</div>}
         </div>)}
 
+        {/* MAP */}
+        {tab==="map"&&(<div>
+          {!geo&&(
+            <div style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:16,marginBottom:12,textAlign:"center"}}>
+              <div style={{fontSize:32,marginBottom:8}}>🗺️</div>
+              <div style={{color:"#e8e0d0",fontWeight:700,marginBottom:6}}>Activează locația ca să apari pe hartă</div>
+              <button style={S.geoBtn} onClick={requestGeo}>📍 Activează Locația</button>
+              {geoError&&<div style={{color:"#e87070",fontSize:13,marginTop:8}}>{geoError}</div>}
+            </div>
+          )}
+          <LiveMap
+            allUsers={allUsers}
+            currentUser={authUser}
+            geo={geo}
+            onUserClick={(u)=>setViewProfile(u)}
+            onCheckin={()=>{}}
+          />
+        </div>)}
+
+        {/* NEARBY */}
         {tab==="nearby"&&(<div>
           <div style={{marginBottom:16,display:"flex",flexDirection:"column",gap:10}}>
             {geo?<div style={{color:"#4caf82",fontSize:14,fontWeight:600}}>📍 Locație activă</div>:<button style={S.geoBtn} onClick={requestGeo}>📍 Activează Locația</button>}
@@ -336,9 +541,23 @@ export default function App() {
           </div>
           {!geo&&<div style={S.emptyState}>🗺️ Activează locația ca să vezi<br/>cine bea lângă tine.</div>}
           {geo&&nearbyUsers.length===0&&<div style={S.emptyState}>🌵 Niciun bețiv în {radius}km.<br/>Mărește raza sau mergi la bar.</div>}
-          {nearbyUsers.map(u=>(<div key={u.id} style={S.nearbyCard}><span style={{fontSize:32,width:44,textAlign:"center"}}>{u.emoji}</span><div style={{flex:1}}><div style={{fontWeight:700,fontSize:15}}>{u.name}</div><div style={{color:"#888",fontSize:12}}>📍 {distKm(geo.lat,geo.lon,u.lat,u.lon).toFixed(1)} km · {u.drink}</div><div style={{color:"#f5a623",fontSize:13}}>{"★".repeat(Math.round(u.avgRating||0))}<span style={{color:"#888"}}> ({u.totalRatings||0})</span></div></div><div style={{display:"flex",flexDirection:"column",gap:6}}><button style={S.btnSmall} onClick={()=>setViewProfile(u)}>Profil</button><button style={{...S.btnSmall,background:"#1a3a2a",color:"#4caf82",border:"1px solid #4caf82"}} onClick={()=>openChat(u)}>💬</button><button style={{...S.btnSmall,background:"#f5a623",color:"#111",border:"none"}} onClick={()=>{setReviewTarget(u);setReviewText("");setReviewRating(5);}}>⭐</button></div></div>))}
+          {nearbyUsers.map(u=>(<div key={u.id} style={S.nearbyCard}>
+            <span style={{fontSize:32,width:44,textAlign:"center"}}>{u.emoji}</span>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:15}}>{u.name}</div>
+              <div style={{color:"#888",fontSize:12}}>📍 {distKm(geo.lat,geo.lon,u.lat,u.lon).toFixed(1)} km · {u.drink}</div>
+              {u.checkinName&&<div style={{color:"#f5a623",fontSize:12}}>🍺 {u.checkinName}</div>}
+              <div style={{color:"#f5a623",fontSize:13}}>{"★".repeat(Math.round(u.avgRating||0))}<span style={{color:"#888"}}> ({u.totalRatings||0})</span></div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              <button style={S.btnSmall} onClick={()=>setViewProfile(u)}>Profil</button>
+              <button style={{...S.btnSmall,background:"#1a3a2a",color:"#4caf82",border:"1px solid #4caf82"}} onClick={()=>openChat(u)}>💬</button>
+              <button style={{...S.btnSmall,background:"#f5a623",color:"#111",border:"none"}} onClick={()=>{setReviewTarget(u);setReviewText("");setReviewRating(5);}}>⭐</button>
+            </div>
+          </div>))}
         </div>)}
 
+        {/* LEADERBOARD */}
         {tab==="leaderboard"&&(<div>
           {myStats&&(<div style={{background:"linear-gradient(135deg,#1a1200,#2a2000)",border:"1px solid #f5a623",borderRadius:16,padding:16,marginBottom:20}}>
             <div style={{color:"#f5a623",fontSize:12,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Statisticile Tale</div>
@@ -363,16 +582,17 @@ export default function App() {
             <div style={{display:"flex",alignItems:"center",gap:12}}>
               <div style={{fontSize:24,width:32,textAlign:"center",fontWeight:900,color:i===0?"#f5a623":i===1?"#aaa":i===2?"#cd7f32":"#666"}}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":`#${i+1}`}</div>
               <span style={{fontSize:28}}>{u.emoji}</span>
-              <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:u.id===authUser.uid?"#f5a623":"#e8e0d0"}}>{u.name} {u.id===authUser.uid&&"(tu)"}</div><div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>{u.badges.slice(0,3).map(bid=>{const b=BADGE_DEFS.find(x=>x.id===bid);return b?<span key={bid} style={{fontSize:14}}>{b.icon}</span>:null;})}</div></div>
+              <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:u.id===authUser.uid?"#f5a623":"#e8e0d0"}}>{u.name} {u.id===authUser.uid&&"(tu)"}</div><div style={{display:"flex",gap:8,marginTop:4}}>{u.badges.slice(0,3).map(bid=>{const b=BADGE_DEFS.find(x=>x.id===bid);return b?<span key={bid}>{b.icon}</span>:null;})}</div></div>
               <div style={{textAlign:"right"}}><div style={{fontWeight:800,fontSize:18,color:"#f5a623"}}>{u.score}</div><div style={{color:"#888",fontSize:11}}>🍻{u.totalLikes} 📝{u.totalPosts}</div></div>
             </div>
           </div>))}
           <div style={{marginTop:24,borderTop:"1px solid #1e1e1e",paddingTop:16}}>
             <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Toate Badge-urile</div>
-            {BADGE_DEFS.map(b=>(<div key={b.id} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}><span style={{fontSize:24,width:30,textAlign:"center"}}>{b.icon}</span><div><div style={{fontWeight:700,fontSize:14,color:"#e8e0d0"}}>{b.name}</div><div style={{color:"#888",fontSize:12}}>{b.desc}</div></div></div>))}
+            {BADGE_DEFS.map(b=>(<div key={b.id} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}><span style={{fontSize:24,width:30,textAlign:"center"}}>{b.icon}</span><div><div style={{fontWeight:700,fontSize:14}}>{b.name}</div><div style={{color:"#888",fontSize:12}}>{b.desc}</div></div></div>))}
           </div>
         </div>)}
 
+        {/* MESSAGES */}
         {tab==="messages"&&!chatWith&&(<div>
           <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:16}}>Conversații</div>
           {conversations.map(conv=>{const otherId=conv.participants.find(p=>p!==authUser.uid);const otherName=conv.participantNames?.[otherId]||"Utilizator";const otherEmoji=conv.participantEmojis?.[otherId]||"🍺";const isUnread=conv.lastSenderId!==authUser.uid&&!(conv.readBy||[]).includes(authUser.uid);const otherUser=allUsers.find(u=>u.id===otherId);return(<div key={conv.id} style={{...S.postCard,cursor:"pointer",borderColor:isUnread?"#f5a623":"#242424"}} onClick={()=>otherUser&&setChatWith(otherUser)}><div style={{display:"flex",gap:12,alignItems:"center"}}><span style={{fontSize:32}}>{otherEmoji}</span><div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,color:isUnread?"#f5a623":"#e8e0d0"}}>{otherName}</div><div style={{color:"#888",fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{conv.lastMessage}</div></div><div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}><span style={{color:"#555",fontSize:11}}>{timeAgo(conv.lastMessageAt)}</span>{isUnread&&<span style={{background:"#f5a623",color:"#111",borderRadius:10,padding:"2px 7px",fontSize:11,fontWeight:700}}>nou</span>}</div></div></div>);})}
@@ -399,8 +619,15 @@ export default function App() {
         {tab==="profile"&&profile&&(<ProfileView user={{...profile,id:authUser.uid}} posts={posts} allUsers={allUsers} isOwn={true} onSignOut={handleSignOut} onLightbox={setLightboxImg} onBadge={setBadgeTooltip} styles={S} timeAgo={timeAgo} getTitle={getTitle} computeBadges={computeBadges} BADGE_DEFS={BADGE_DEFS}/>)}
       </div>
 
+      {/* NAV - 6 tabs */}
       <div style={S.nav}>
-        {[{key:"feed",icon:"🏠",label:"Feed"},{key:"nearby",icon:"📍",label:"Aproape"},{key:"leaderboard",icon:"🏆",label:"Top"},{key:"messages",icon:"💬",label:"Mesaje",badge:unreadCount},{key:"profile",icon:profile?.emoji,label:"Profil"}].map(t=>(
+        {[
+          {key:"feed",icon:"🏠",label:"Feed"},
+          {key:"map",icon:"🗺️",label:"Hartă"},
+          {key:"leaderboard",icon:"🏆",label:"Top"},
+          {key:"messages",icon:"💬",label:"Mesaje",badge:unreadCount},
+          {key:"profile",icon:profile?.emoji,label:"Profil"},
+        ].map(t=>(
           <button key={t.key} style={{...S.navBtn,...(tab===t.key?S.navBtnActive:{})}} onClick={()=>{setTab(t.key);if(t.key!=="messages")setChatWith(null);setOpenComments(null);}}>
             <div style={{position:"relative",display:"inline-block"}}>
               <span style={{fontSize:20}}>{t.icon}</span>
@@ -430,9 +657,7 @@ function ProfileView({user,posts,allUsers,isOwn,onSignOut,onReview,onChat,onLigh
       <div style={{color:"#bbb",fontSize:14,marginTop:6}}>🥤 {user.drink}</div>
       <div style={{color:"#aaa",fontSize:14,marginTop:10,fontStyle:"italic",lineHeight:1.6}}>{user.bio}</div>
       <div style={{marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><span style={{color:"#f5a623",fontSize:20}}>{"★".repeat(Math.round(user.avgRating||0))}</span><span style={{color:"#888",fontSize:12}}>{user.avgRating||0} ({user.totalRatings||0} recenzii)</span></div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginTop:14}}>
-        {[{icon:"📝",val:userPosts.length,label:"Postări"},{icon:"🍻",val:totalLikes,label:"Cheers"},{icon:"⭐",val:user.totalRatings||0,label:"Recenzii"}].map(s=>(<div key={s.label} style={{background:"#1a1a1a",borderRadius:10,padding:"8px 4px",textAlign:"center"}}><div style={{fontSize:18}}>{s.icon}</div><div style={{fontWeight:800,fontSize:16,color:"#f5a623"}}>{s.val}</div><div style={{color:"#888",fontSize:11}}>{s.label}</div></div>))}
-      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginTop:14}}>{[{icon:"📝",val:userPosts.length,label:"Postări"},{icon:"🍻",val:totalLikes,label:"Cheers"},{icon:"⭐",val:user.totalRatings||0,label:"Recenzii"}].map(s=>(<div key={s.label} style={{background:"#1a1a1a",borderRadius:10,padding:"8px 4px",textAlign:"center"}}><div style={{fontSize:18}}>{s.icon}</div><div style={{fontWeight:800,fontSize:16,color:"#f5a623"}}>{s.val}</div><div style={{color:"#888",fontSize:11}}>{s.label}</div></div>))}</div>
       {badges.length>0&&(<div style={{marginTop:14}}><div style={{color:"#888",fontSize:12,marginBottom:8}}>Badge-uri:</div><div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center"}}>{badges.map(bid=>{const b=BADGE_DEFS.find(x=>x.id===bid);if(!b)return null;return(<button key={bid} style={{background:"#1e1e1e",border:"1px solid #333",borderRadius:20,padding:"5px 10px",display:"flex",alignItems:"center",gap:5,cursor:"pointer",color:"#e8e0d0",fontSize:12}} onClick={()=>onBadge&&onBadge(b)}><span>{b.icon}</span><span>{b.name}</span></button>);})}</div></div>)}
       {!isOwn&&<div style={{display:"flex",gap:8,marginTop:12}}>{onReview&&<button style={{...S.btnPrimary,flex:1}} onClick={()=>onReview(user)}>⭐ Recenzie</button>}{onChat&&<button style={{...S.btnPrimary,flex:1,background:"linear-gradient(135deg,#4caf82,#2d8a5e)"}} onClick={()=>onChat(user)}>💬 Mesaj</button>}</div>}
       {isOwn&&onSignOut&&<button style={{...S.btnSmall,marginTop:12,width:"100%",padding:"10px",color:"#e87070",border:"1px solid #e87070"}} onClick={onSignOut}>Deconectare</button>}
