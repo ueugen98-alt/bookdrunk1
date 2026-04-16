@@ -71,9 +71,7 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick }) {
       script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
       script.onload = () => setLeafletLoaded(true);
       document.head.appendChild(script);
-    } else {
-      setLeafletLoaded(true);
-    }
+    } else { setLeafletLoaded(true); }
   }, []);
 
   useEffect(() => {
@@ -97,7 +95,7 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick }) {
       const checkedIn = u.checkinName ? `<br/><span style="font-size:10px;color:#f5a623">📍 ${u.checkinName}</span>` : '';
       const icon = window.L.divIcon({
         html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${isMe?'#f5a623':isActive?'#2a2a2a':'#1a1a1a'};border:${isMe?'3px solid #fff':isActive?'2px solid #f5a623':'2px solid #444'};display:flex;align-items:center;justify-content:center;font-size:${isMe?22:isActive?18:16}px;box-shadow:${isMe?'0 0 12px rgba(245,166,35,0.8)':isActive?'0 0 8px rgba(245,166,35,0.4)':'none'};cursor:pointer;">${u.emoji}</div>`,
-        className: '', iconSize: [size, size], iconAnchor: [size/2, size/2],
+        className:'', iconSize:[size,size], iconAnchor:[size/2,size/2],
       });
       const marker = window.L.marker([u.lat, u.lon], { icon }).addTo(map)
         .bindPopup(`<div style="font-family:Georgia,serif;text-align:center;min-width:120px"><div style="font-size:28px">${u.emoji}</div><div style="font-weight:700;color:#f5a623;font-size:14px">${u.name}</div><div style="color:#888;font-size:11px">${u.drink}</div>${checkedIn}<div style="color:#aaa;font-size:10px;margin-top:4px">${isActive?'🟢 Activ recent':'⚫ Inactiv'}</div>${!isMe?`<button onclick="window._dbUserClick('${u.id}')" style="margin-top:8px;background:#f5a623;border:none;border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer;font-family:Georgia,serif">Vezi Profil</button>`:''}</div>`);
@@ -208,6 +206,9 @@ export default function App() {
   const [globalSearch,setGlobalSearch]=useState("");
   const [showGlobalSearch,setShowGlobalSearch]=useState(false);
   const [confirmDelete,setConfirmDelete]=useState(null);
+  const [editProfile,setEditProfile]=useState(false);
+  const [editData,setEditData]=useState({name:"",emoji:"🍺",drink:"",bio:""});
+  const [savingProfile,setSavingProfile]=useState(false);
   const messagesEndRef=useRef(null);
   const commentInputRef=useRef(null);
   const fileInputRef=useRef(null);
@@ -325,12 +326,7 @@ export default function App() {
   }
 
   async function toggleLike(postId,likes){const uid=authUser.uid;await updateDoc(doc(db,"posts",postId),{likes:likes.includes(uid)?likes.filter(l=>l!==uid):[...likes,uid]});}
-
-  async function deletePost(postId){
-    await deleteDoc(doc(db,"posts",postId));
-    setConfirmDelete(null);
-    showToast("Postare ștearsă! 🗑️");
-  }
+  async function deletePost(postId){await deleteDoc(doc(db,"posts",postId));setConfirmDelete(null);showToast("Postare ștearsă! 🗑️");}
 
   async function submitComment(postId){
     if(!newComment.trim())return;
@@ -354,6 +350,22 @@ export default function App() {
     await addDoc(collection(db,"chats",chatId,"messages"),{text:newMsg,senderId:authUser.uid,senderName:profile.name,senderEmoji:profile.emoji,createdAt:serverTimestamp()});
     await setDoc(doc(db,"conversations",chatId),{participants:[authUser.uid,chatWith.id],participantNames:{[authUser.uid]:profile.name,[chatWith.id]:chatWith.name},participantEmojis:{[authUser.uid]:profile.emoji,[chatWith.id]:chatWith.emoji},lastMessage:newMsg,lastSenderId:authUser.uid,lastMessageAt:serverTimestamp(),readBy:[authUser.uid]},{merge:true});
     setNewMsg("");
+  }
+
+  async function saveProfile(){
+    if(!editData.name.trim())return;
+    setSavingProfile(true);
+    await updateDoc(doc(db,"users",authUser.uid),{
+      name:editData.name,emoji:editData.emoji,drink:editData.drink||"Ceva tare",bio:editData.bio||"Omul misterios de la bar.",
+    });
+    setProfile(p=>({...p,name:editData.name,emoji:editData.emoji,drink:editData.drink,bio:editData.bio}));
+    setEditProfile(false);setSavingProfile(false);
+    showToast("Profil actualizat! ✅");
+  }
+
+  function openEditProfile(){
+    setEditData({name:profile.name||"",emoji:profile.emoji||"🍺",drink:profile.drink||"",bio:profile.bio||""});
+    setEditProfile(true);
   }
 
   function openChat(user){setChatWith(user);setViewProfile(null);setTab("messages");}
@@ -408,7 +420,37 @@ export default function App() {
       {lightboxImg&&(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setLightboxImg(null)}><img src={lightboxImg} alt="" style={{maxWidth:"95vw",maxHeight:"90vh",borderRadius:12,objectFit:"contain"}}/><button style={{position:"absolute",top:20,right:20,background:"#2a2a2a",border:"none",color:"#fff",width:36,height:36,borderRadius:"50%",fontSize:18,cursor:"pointer"}}>✕</button></div>)}
       {badgeTooltip&&(<div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"#1a1a1a",border:"1px solid #f5a623",borderRadius:16,padding:20,zIndex:400,textAlign:"center",minWidth:200}} onClick={()=>setBadgeTooltip(null)}><div style={{fontSize:48,marginBottom:8}}>{badgeTooltip.icon}</div><div style={{fontWeight:700,color:"#f5a623",fontSize:16,marginBottom:6}}>{badgeTooltip.name}</div><div style={{color:"#aaa",fontSize:13}}>{badgeTooltip.desc}</div><div style={{color:"#666",fontSize:11,marginTop:12}}>Apasă pentru a închide</div></div>)}
 
-      {/* Confirm Delete Modal */}
+      {/* Edit Profile Modal */}
+      {editProfile&&(<div style={S.modal} onClick={()=>setEditProfile(false)}><div style={S.modalBox} onClick={e=>e.stopPropagation()}>
+        <button style={S.modalClose} onClick={()=>setEditProfile(false)}>✕</button>
+        <div style={{fontSize:18,fontWeight:700,color:"#f5a623",marginBottom:20,textAlign:"center"}}>✏️ Editează Profilul</div>
+
+        <div style={{marginBottom:14}}>
+          <div style={{color:"#888",fontSize:12,marginBottom:6}}>Emoji</div>
+          <div style={S.emojiGrid}>{DRINKS.map(e=><button key={e} style={{...S.emojiBtn,...(editData.emoji===e?S.emojiBtnActive:{})}} onClick={()=>setEditData(d=>({...d,emoji:e}))}>{e}</button>)}</div>
+        </div>
+
+        <div style={{marginBottom:14}}>
+          <div style={{color:"#888",fontSize:12,marginBottom:6}}>Nume</div>
+          <input style={S.input} placeholder="Numele tău de bar..." value={editData.name} onChange={e=>setEditData(d=>({...d,name:e.target.value}))}/>
+        </div>
+
+        <div style={{marginBottom:14}}>
+          <div style={{color:"#888",fontSize:12,marginBottom:6}}>Băutura favorită</div>
+          <input style={S.input} placeholder="ex: Bere, Whisky, Vin roșu..." value={editData.drink} onChange={e=>setEditData(d=>({...d,drink:e.target.value}))}/>
+        </div>
+
+        <div style={{marginBottom:20}}>
+          <div style={{color:"#888",fontSize:12,marginBottom:6}}>Bio</div>
+          <textarea style={{...S.input,height:90,resize:"none"}} placeholder="Spune ceva despre tine..." value={editData.bio} onChange={e=>setEditData(d=>({...d,bio:e.target.value}))}/>
+        </div>
+
+        <button style={{...S.btnPrimary,opacity:savingProfile?0.6:1}} onClick={saveProfile} disabled={savingProfile}>
+          {savingProfile?"Se salvează...":"✅ Salvează Profilul"}
+        </button>
+      </div></div>)}
+
+      {/* Confirm Delete */}
       {confirmDelete&&(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><div style={{background:"#1a1a1a",border:"1px solid #e87070",borderRadius:16,padding:24,maxWidth:300,width:"100%",textAlign:"center"}}>
         <div style={{fontSize:36,marginBottom:12}}>🗑️</div>
         <div style={{fontWeight:700,fontSize:16,marginBottom:8}}>Ștergi postarea?</div>
@@ -429,11 +471,7 @@ export default function App() {
           {globalSearch&&searchResults.length===0&&<div style={{textAlign:"center",color:"#666",fontSize:16,marginTop:40,fontStyle:"italic"}}>Niciun utilizator găsit 🍺</div>}
           {searchResults.map(u=>(<div key={u.id} style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:14,marginBottom:10,display:"flex",alignItems:"center",gap:12,cursor:"pointer"}} onClick={()=>{setViewProfile(u);setShowGlobalSearch(false);setGlobalSearch("");}}>
             <span style={{fontSize:32}}>{u.emoji}</span>
-            <div style={{flex:1}}>
-              <div style={{fontWeight:700,fontSize:16,color:"#f5a623"}}>{u.name}</div>
-              <div style={{color:"#888",fontSize:13}}>{u.drink}</div>
-              {u.bio&&<div style={{color:"#666",fontSize:12,marginTop:2,fontStyle:"italic"}}>{u.bio.slice(0,50)}{u.bio.length>50?"...":""}</div>}
-            </div>
+            <div style={{flex:1}}><div style={{fontWeight:700,fontSize:16,color:"#f5a623"}}>{u.name}</div><div style={{color:"#888",fontSize:13}}>{u.drink}</div>{u.bio&&<div style={{color:"#666",fontSize:12,marginTop:2,fontStyle:"italic"}}>{u.bio.slice(0,50)}{u.bio.length>50?"...":""}</div>}</div>
             <div style={{textAlign:"right"}}><div style={{color:"#f5a623",fontSize:13}}>{"★".repeat(Math.round(u.avgRating||0))}</div><div style={{color:"#888",fontSize:11}}>{u.totalRatings||0} recenzii</div></div>
           </div>))}
           {!globalSearch&&<div style={{textAlign:"center",color:"#555",fontSize:14,marginTop:60,fontStyle:"italic"}}>Scrie un nume sau o băutură...</div>}
@@ -462,7 +500,6 @@ export default function App() {
               <button style={{...S.postBtn,opacity:uploadingPost?0.6:1}} onClick={submitPost} disabled={uploadingPost}>{uploadingPost?"Se încarcă...":"Postează"}</button>
             </div>
           </div>
-
           {posts.map(post=>(
             <div key={post.id} style={S.postCard}>
               <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:10}}>
@@ -587,7 +624,7 @@ export default function App() {
           </div>
         </div>)}
 
-        {tab==="profile"&&profile&&(<ProfileView user={{...profile,id:authUser.uid}} posts={posts} allUsers={allUsers} isOwn={true} onSignOut={handleSignOut} onLightbox={setLightboxImg} onBadge={setBadgeTooltip} styles={S} timeAgo={timeAgo} getTitle={getTitle} computeBadges={computeBadges} BADGE_DEFS={BADGE_DEFS}/>)}
+        {tab==="profile"&&profile&&(<ProfileView user={{...profile,id:authUser.uid}} posts={posts} allUsers={allUsers} isOwn={true} onSignOut={handleSignOut} onEdit={openEditProfile} onLightbox={setLightboxImg} onBadge={setBadgeTooltip} styles={S} timeAgo={timeAgo} getTitle={getTitle} computeBadges={computeBadges} BADGE_DEFS={BADGE_DEFS}/>)}
       </div>
 
       <div style={S.nav}>
@@ -602,14 +639,14 @@ export default function App() {
         ))}
       </div>
 
-      {viewProfile&&(<div style={S.modal} onClick={()=>setViewProfile(null)}><div style={S.modalBox} onClick={e=>e.stopPropagation()}><button style={S.modalClose} onClick={()=>setViewProfile(null)}>✕</button><ProfileView user={viewProfile} posts={posts} allUsers={allUsers} isOwn={viewProfile.id===authUser.uid} onReview={u=>{setViewProfile(null);setReviewTarget(u);setReviewText("");setReviewRating(5);}} onChat={u=>openChat(u)} onLightbox={setLightboxImg} onBadge={setBadgeTooltip} styles={S} timeAgo={timeAgo} getTitle={getTitle} computeBadges={computeBadges} BADGE_DEFS={BADGE_DEFS}/></div></div>)}
+      {viewProfile&&(<div style={S.modal} onClick={()=>setViewProfile(null)}><div style={S.modalBox} onClick={e=>e.stopPropagation()}><button style={S.modalClose} onClick={()=>setViewProfile(null)}>✕</button><ProfileView user={viewProfile} posts={posts} allUsers={allUsers} isOwn={viewProfile.id===authUser.uid} onReview={u=>{setViewProfile(null);setReviewTarget(u);setReviewText("");setReviewRating(5);}} onChat={u=>openChat(u)} onEdit={viewProfile.id===authUser.uid?openEditProfile:null} onLightbox={setLightboxImg} onBadge={setBadgeTooltip} styles={S} timeAgo={timeAgo} getTitle={getTitle} computeBadges={computeBadges} BADGE_DEFS={BADGE_DEFS}/></div></div>)}
 
       {reviewTarget&&(<div style={S.modal} onClick={()=>setReviewTarget(null)}><div style={S.modalBox} onClick={e=>e.stopPropagation()}><button style={S.modalClose} onClick={()=>setReviewTarget(null)}>✕</button><div style={{fontSize:18,fontWeight:700,color:"#f5a623",marginBottom:16,textAlign:"center"}}>Recenzie pentru {reviewTarget.name}</div><div style={{display:"flex",justifyContent:"center",gap:8,marginBottom:8}}>{[1,2,3,4,5].map(s=><button key={s} style={{background:"none",border:"none",cursor:"pointer",padding:2}} onMouseEnter={()=>setHoverRating(s)} onMouseLeave={()=>setHoverRating(0)} onClick={()=>setReviewRating(s)}><span style={{fontSize:28,color:s<=(hoverRating||reviewRating)?"#f5a623":"#444"}}>★</span></button>)}</div><div style={{textAlign:"center",color:"#f5a623",marginBottom:12,fontSize:14}}>{["","Dezamăgire totală","Poate cu noroc","Ok, nimic special","Bun tovarăș","Legendă!"][hoverRating||reviewRating]}</div><textarea style={{...S.input,height:90,resize:"none"}} placeholder="Povestește ce știi despre el/ea..." value={reviewText} onChange={e=>setReviewText(e.target.value)}/><button style={S.btnPrimary} onClick={submitReview}>Trimite Recenzia 🍺</button></div></div>)}
     </div>
   );
 }
 
-function ProfileView({user,posts,allUsers,isOwn,onSignOut,onReview,onChat,onLightbox,onBadge,styles:S,timeAgo,getTitle,computeBadges,BADGE_DEFS}){
+function ProfileView({user,posts,allUsers,isOwn,onSignOut,onEdit,onReview,onChat,onLightbox,onBadge,styles:S,timeAgo,getTitle,computeBadges,BADGE_DEFS}){
   const userPosts=posts.filter(p=>p.userId===user.id);
   const totalLikes=userPosts.reduce((s,p)=>s+(p.likes||[]).length,0);
   const badges=computeBadges({...user,id:user.id||user.uid},posts,allUsers||[]);
@@ -623,8 +660,9 @@ function ProfileView({user,posts,allUsers,isOwn,onSignOut,onReview,onChat,onLigh
       <div style={{marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><span style={{color:"#f5a623",fontSize:20}}>{"★".repeat(Math.round(user.avgRating||0))}</span><span style={{color:"#888",fontSize:12}}>{user.avgRating||0} ({user.totalRatings||0} recenzii)</span></div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginTop:14}}>{[{icon:"📝",val:userPosts.length,label:"Postări"},{icon:"🍻",val:totalLikes,label:"Cheers"},{icon:"⭐",val:user.totalRatings||0,label:"Recenzii"}].map(s=>(<div key={s.label} style={{background:"#1a1a1a",borderRadius:10,padding:"8px 4px",textAlign:"center"}}><div style={{fontSize:18}}>{s.icon}</div><div style={{fontWeight:800,fontSize:16,color:"#f5a623"}}>{s.val}</div><div style={{color:"#888",fontSize:11}}>{s.label}</div></div>))}</div>
       {badges.length>0&&(<div style={{marginTop:14}}><div style={{color:"#888",fontSize:12,marginBottom:8}}>Badge-uri:</div><div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center"}}>{badges.map(bid=>{const b=BADGE_DEFS.find(x=>x.id===bid);if(!b)return null;return(<button key={bid} style={{background:"#1e1e1e",border:"1px solid #333",borderRadius:20,padding:"5px 10px",display:"flex",alignItems:"center",gap:5,cursor:"pointer",color:"#e8e0d0",fontSize:12}} onClick={()=>onBadge&&onBadge(b)}><span>{b.icon}</span><span>{b.name}</span></button>);})}</div></div>)}
+      {isOwn&&onEdit&&<button style={{...S.btnPrimary,marginTop:12,background:"linear-gradient(135deg,#2a4a8a,#1a3a6a)"}} onClick={onEdit}>✏️ Editează Profilul</button>}
       {!isOwn&&<div style={{display:"flex",gap:8,marginTop:12}}>{onReview&&<button style={{...S.btnPrimary,flex:1}} onClick={()=>onReview(user)}>⭐ Recenzie</button>}{onChat&&<button style={{...S.btnPrimary,flex:1,background:"linear-gradient(135deg,#4caf82,#2d8a5e)"}} onClick={()=>onChat(user)}>💬 Mesaj</button>}</div>}
-      {isOwn&&onSignOut&&<button style={{...S.btnSmall,marginTop:12,width:"100%",padding:"10px",color:"#e87070",border:"1px solid #e87070"}} onClick={onSignOut}>Deconectare</button>}
+      {isOwn&&onSignOut&&<button style={{...S.btnSmall,marginTop:10,width:"100%",padding:"10px",color:"#e87070",border:"1px solid #e87070"}} onClick={onSignOut}>Deconectare</button>}
     </div>
     {(user.ratings||[]).length>0&&<div style={{marginBottom:16}}><div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Recenzii</div>{[...(user.ratings||[])].reverse().map((r,i)=>(<div key={i} style={{background:"#1a1a1a",borderRadius:10,padding:12,marginBottom:8}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{color:"#f5a623"}}>{"★".repeat(r.rating)}</span><span style={{fontWeight:700,fontSize:13,color:"#ccc"}}>{r.fromName}</span><span style={{color:"#555",fontSize:12,marginLeft:"auto"}}>{timeAgo({seconds:r.time/1000})}</span></div><div style={{color:"#bbb",fontSize:14,lineHeight:1.5}}>{r.text}</div></div>))}</div>}
     {userPosts.length>0&&<div><div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Postări</div>{userPosts.map(p=>(<div key={p.id} style={{background:"#1a1a1a",borderRadius:10,padding:12,marginBottom:8}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span>{p.drink}</span><span style={{color:"#555",fontSize:12,marginLeft:"auto"}}>{timeAgo(p.createdAt)}</span></div>{p.text&&<div style={{color:"#bbb",fontSize:14,lineHeight:1.5,marginBottom:p.imageUrl?8:0}}>{p.text}</div>}{p.imageUrl&&<img src={p.imageUrl} alt="" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:8,cursor:"pointer"}} onClick={()=>onLightbox&&onLightbox(p.imageUrl)}/>}<div style={{color:"#888",fontSize:12,marginTop:6}}>🍻 {(p.likes||[]).length} cheers · 💬 {p.commentCount||0}</div></div>))}</div>}
