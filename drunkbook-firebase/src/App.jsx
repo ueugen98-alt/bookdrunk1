@@ -64,6 +64,17 @@ function computeBadges(user, posts, allUsers) {
 function getTitle(r){if(!r||r<1)return TITLES[0];if(r<2)return TITLES[1];if(r<3)return TITLES[2];if(r<4)return TITLES[3];if(r<5)return TITLES[4];if(r<6)return TITLES[5];if(r<8)return TITLES[6];return TITLES[7];}
 function distKm(lat1,lon1,lat2,lon2){const R=6371,dLat=((lat2-lat1)*Math.PI)/180,dLon=((lon2-lon1)*Math.PI)/180,a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
 function timeAgo(ts){if(!ts)return "";const diff=Date.now()-(ts.seconds?ts.seconds*1000:ts);if(diff<60000)return "acum";if(diff<3600000)return Math.floor(diff/60000)+" min";if(diff<86400000)return Math.floor(diff/3600000)+"h";return Math.floor(diff/86400000)+"z";}
+function getStatus(user){
+  if(!user)return null;
+  if(user.online)return{dot:"#4caf82",label:"Online",short:"🟢"};
+  if(!user.lastSeen)return{dot:"#555",label:"Necunoscut",short:"⚫"};
+  const diff=Date.now()-user.lastSeen.seconds*1000;
+  if(diff<3*60*1000)return{dot:"#4caf82",label:"Online",short:"🟢"};
+  if(diff<30*60*1000)return{dot:"#f5a623",label:`Activ ${timeAgo(user.lastSeen)}`,short:"🟡"};
+  if(diff<60*60*1000)return{dot:"#888",label:`Activ ${timeAgo(user.lastSeen)}`,short:"⚫"};
+  if(diff<24*60*60*1000)return{dot:"#555",label:`Activ ${timeAgo(user.lastSeen)}`,short:"⚫"};
+  return{dot:"#333",label:`Activ ${timeAgo(user.lastSeen)}`,short:"⚫"};
+}
 function getChatId(a,b){return [a,b].sort().join("_");}
 function setCookie(n,v,d=365){document.cookie=`${n}=${encodeURIComponent(v)};path=/;max-age=${d*86400};SameSite=Lax`;}
 function getCookie(n){return decodeURIComponent(document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith(n+'='))?.split('=')[1]||'');}
@@ -393,8 +404,20 @@ export default function App() {
 
   useEffect(()=>{
     if(!authUser||screen!=="app")return;
-    const update=()=>updateDoc(doc(db,"users",authUser.uid),{lastSeen:serverTimestamp()}).catch(()=>{});
-    update(); const interval=setInterval(update,5*60*1000); return()=>clearInterval(interval);
+    const update=()=>updateDoc(doc(db,"users",authUser.uid),{lastSeen:serverTimestamp(),online:true}).catch(()=>{});
+    update();
+    const interval=setInterval(update,60*1000);
+    // Mark offline when tab hidden
+    const onHide=()=>updateDoc(doc(db,"users",authUser.uid),{online:false}).catch(()=>{});
+    const onShow=()=>update();
+    document.addEventListener("visibilitychange",()=>document.hidden?onHide():onShow());
+    window.addEventListener("beforeunload",onHide);
+    return()=>{
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange",()=>document.hidden?onHide():onShow());
+      window.removeEventListener("beforeunload",onHide);
+      onHide();
+    };
   },[authUser,screen]);
 
   // Listen to challenges
@@ -811,7 +834,7 @@ export default function App() {
             <div key={post.id} style={S.postCard}>
               <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:10}}>
                 <button style={S.postAvatar} onClick={()=>{const u=allUsers.find(u=>u.id===post.userId);if(u)setViewProfile(u);}}>{post.userEmoji}</button>
-                <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:"#f5a623"}}>{post.userName}</div><div style={{color:"#666",fontSize:12}}>{post.drink} · {timeAgo(post.createdAt)}</div></div>
+                <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:"#f5a623"}}>{post.userName}</div><div style={{color:"#666",fontSize:12,display:"flex",alignItems:"center",gap:6}}>{post.drink} · {timeAgo(post.createdAt)}{(()=>{const u=allUsers.find(u=>u.id===post.userId);const st=getStatus(u);return st?<span style={{display:"inline-flex",alignItems:"center",gap:3}}><span style={{width:6,height:6,borderRadius:"50%",background:st.dot,display:"inline-block"}}/><span>{st.label}</span></span>:null;})()}</div></div>
                 {post.userId!==authUser.uid&&<button style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:"4px 8px"}} onClick={()=>{const u=allUsers.find(u=>u.id===post.userId);if(u)openChat(u);}}>💬</button>}
                 {post.userId===authUser.uid&&<button style={{background:"none",border:"none",cursor:"pointer",fontSize:16,padding:"4px 8px",color:"#666"}} onClick={()=>setConfirmDelete(post.id)}>🗑️</button>}
               </div>
@@ -1012,7 +1035,7 @@ export default function App() {
         {/* MESSAGES */}
         {tab==="messages"&&!chatWith&&(<div>
           <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Conversații</div>
-          {conversations.map(conv=>{const otherId=conv.participants.find(p=>p!==authUser.uid);const otherName=conv.participantNames?.[otherId]||"Utilizator";const otherEmoji=conv.participantEmojis?.[otherId]||"🍺";const isUnread=conv.lastSenderId!==authUser.uid&&!(conv.readBy||[]).includes(authUser.uid);const otherUser=allUsers.find(u=>u.id===otherId);return(<div key={conv.id} style={{...S.postCard,cursor:"pointer",borderColor:isUnread?"#f5a623":"#242424"}} onClick={()=>otherUser&&setChatWith(otherUser)}><div style={{display:"flex",gap:12,alignItems:"center"}}><span style={{fontSize:32}}>{otherEmoji}</span><div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,color:isUnread?"#f5a623":"#e8e0d0"}}>{otherName}</div><div style={{color:"#888",fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{conv.lastMessage}</div></div><div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}><span style={{color:"#555",fontSize:11}}>{timeAgo(conv.lastMessageAt)}</span>{isUnread&&<span style={{background:"#f5a623",color:"#111",borderRadius:10,padding:"2px 7px",fontSize:11,fontWeight:700}}>nou</span>}</div></div></div>);})}
+          {conversations.map(conv=>{const otherId=conv.participants.find(p=>p!==authUser.uid);const otherName=conv.participantNames?.[otherId]||"Utilizator";const otherEmoji=conv.participantEmojis?.[otherId]||"🍺";const isUnread=conv.lastSenderId!==authUser.uid&&!(conv.readBy||[]).includes(authUser.uid);const otherUser=allUsers.find(u=>u.id===otherId);const st=getStatus(otherUser);return(<div key={conv.id} style={{...S.postCard,cursor:"pointer",borderColor:isUnread?"#f5a623":"#242424"}} onClick={()=>otherUser&&setChatWith(otherUser)}><div style={{display:"flex",gap:12,alignItems:"center"}}><div style={{position:"relative",flexShrink:0}}><span style={{fontSize:32}}>{otherEmoji}</span>{st&&<span style={{position:"absolute",bottom:0,right:0,width:10,height:10,borderRadius:"50%",background:st.dot,border:"2px solid #171717"}}/>}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,color:isUnread?"#f5a623":"#e8e0d0"}}>{otherName}</div><div style={{color:"#888",fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{conv.lastMessage}</div></div><div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}><span style={{color:"#555",fontSize:11}}>{timeAgo(conv.lastMessageAt)}</span>{isUnread&&<span style={{background:"#f5a623",color:"#111",borderRadius:10,padding:"2px 7px",fontSize:11,fontWeight:700}}>nou</span>}</div></div></div>);})}
           <div style={{marginTop:20}}>
             <input style={{...S.input,marginBottom:12}} placeholder="🔍 Caută utilizator..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
             <div style={{color:"#888",fontSize:13,marginBottom:10}}>{searchQuery?`Rezultate pentru "${searchQuery}":`:"Toți utilizatorii:"}</div>
@@ -1024,7 +1047,7 @@ export default function App() {
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,paddingBottom:12,borderBottom:"1px solid #1e1e1e"}}>
             <button style={{background:"none",border:"none",color:"#f5a623",fontSize:22,cursor:"pointer"}} onClick={()=>setChatWith(null)}>←</button>
             <span style={{fontSize:28}}>{chatWith.emoji}</span>
-            <div><div style={{fontWeight:700,color:"#f5a623"}}>{chatWith.name}</div><div style={{color:"#888",fontSize:12}}>{chatWith.drink}</div></div>
+            <div style={{flex:1}}><div style={{fontWeight:700,color:"#f5a623"}}>{chatWith.name}</div><div style={{color:"#888",fontSize:12,display:"flex",alignItems:"center",gap:5}}>{(()=>{const st=getStatus(chatWith);return st?<><span style={{width:7,height:7,borderRadius:"50%",background:st.dot,display:"inline-block"}}/><span>{st.label}</span></>:<span>{chatWith.drink}</span>;})()}</div></div>
           </div>
           <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:8,paddingBottom:8}}>
             {messages.length===0&&<div style={{textAlign:"center",color:"#555",marginTop:40,fontStyle:"italic"}}>Începe conversația! 🍺</div>}
@@ -1109,10 +1132,15 @@ function ProfileView({user,posts,allUsers,isOwn,onSignOut,onEdit,onReview,onChat
   const userPosts=posts.filter(p=>p.userId===user.id);
   const totalLikes=userPosts.reduce((s,p)=>s+(p.likes||[]).length,0);
   const badges=computeBadges({...user,id:user.id||user.uid},posts,allUsers||[]);
+  const st=getStatus(user);
   return(<div style={{paddingBottom:20}}>
     <div style={{textAlign:"center",paddingBottom:20,borderBottom:"1px solid #1e1e1e",marginBottom:16}}>
-      <div style={{fontSize:64,marginBottom:8}}>{user.emoji}</div>
+      <div style={{position:"relative",display:"inline-block",marginBottom:8}}>
+        <div style={{fontSize:64}}>{user.emoji}</div>
+        {st&&<span style={{position:"absolute",bottom:4,right:4,width:16,height:16,borderRadius:"50%",background:st.dot,border:"3px solid #141414"}}/>}
+      </div>
       <div style={{fontSize:22,fontWeight:800,color:"#f5a623"}}>{user.name}</div>
+      {st&&<div style={{display:"inline-flex",alignItems:"center",gap:5,marginTop:4,background:"#1a1a1a",borderRadius:20,padding:"4px 10px"}}><span style={{width:7,height:7,borderRadius:"50%",background:st.dot,display:"inline-block"}}/><span style={{color:"#aaa",fontSize:12}}>{st.label}</span></div>}
       <div style={{color:"#888",fontSize:13,fontStyle:"italic",marginTop:4}}>{getTitle(user.avgRating)}</div>
       <div style={{color:"#bbb",fontSize:14,marginTop:6}}>🥤 {user.drink}</div>
       <div style={{color:"#aaa",fontSize:14,marginTop:10,fontStyle:"italic",lineHeight:1.6}}>{user.bio}</div>
