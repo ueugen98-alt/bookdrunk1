@@ -207,7 +207,9 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick, active }) {
         maxZoom: 19, crossOrigin: true,
       }).addTo(map);
       mapInstanceRef.current = map;
-      setTimeout(() => { map.invalidateSize(); setReady(true); }, 300);
+      setTimeout(() => { map.invalidateSize(true); setReady(true); }, 200);
+      setTimeout(() => { map.invalidateSize(true); }, 600);
+      setTimeout(() => { map.invalidateSize(true); }, 1200);
     }
 
     if (!document.getElementById('leaflet-css')) {
@@ -236,15 +238,20 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick, active }) {
     }).setView(center, 13);
     window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
     mapInstanceRef.current = map;
-    setTimeout(() => { map.invalidateSize(); setReady(true); }, 300);
+    // Multiple invalidations to ensure tiles load
+    setTimeout(() => { map.invalidateSize(true); setReady(true); }, 200);
+    setTimeout(() => { map.invalidateSize(true); }, 500);
+    setTimeout(() => { map.invalidateSize(true); }, 1200);
   }, [ready]);
 
-  // Invalidate when tab becomes active
+  // Fix black map - invalidate size after mount
   useEffect(() => {
-    if (!active || !mapInstanceRef.current) return;
-    setTimeout(() => mapInstanceRef.current?.invalidateSize(), 50);
-    setTimeout(() => mapInstanceRef.current?.invalidateSize(), 400);
-  }, [active]);
+    if (!mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    setTimeout(() => { map.invalidateSize(true); }, 100);
+    setTimeout(() => { map.invalidateSize(true); }, 500);
+    setTimeout(() => { map.invalidateSize(true); }, 1000);
+  }, [active, ready]);
 
   // Update markers
   useEffect(() => {
@@ -314,7 +321,7 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick, active }) {
 
       {/* Map container */}
       {!ready && <div style={{height:420,background:"#171717",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center",color:"#888",fontSize:14}}>🗺️ Se încarcă harta...</div>}
-      <div ref={mapRef} style={{height:420,borderRadius:14,overflow:"hidden",visibility:ready?"visible":"hidden",position:ready?"relative":"absolute"}}/>
+      <div ref={mapRef} style={{height:420,width:"100%",borderRadius:14,overflow:"hidden",visibility:ready?"visible":"hidden",position:ready?"relative":"absolute",left:ready?0:-9999}}/>
 
       {/* Legend */}
       {ready && <div style={{display:"flex",gap:12,marginTop:10,flexWrap:"wrap"}}>
