@@ -545,6 +545,11 @@ export default function App() {
       }
       await addDoc(collection(db,"posts",postId,"comments"),{userId:authUser.uid,userName:profile.name,userEmoji:profile.emoji,text:newComment,imageUrl,createdAt:serverTimestamp()});
       await updateDoc(doc(db,"posts",postId),{commentCount:(posts.find(p=>p.id===postId)?.commentCount||0)+1});
+      // Notificare pentru autorul postării
+      const post=posts.find(p=>p.id===postId);
+      if(post&&post.userId!==authUser.uid){
+        await sendInAppNotification(post.userId,"comment",`${profile.name} a comentat la postarea ta: "${newComment.slice(0,50)}${newComment.length>50?"...":""}`);
+      }
       setNewComment("");
       setCommentImage(null);setCommentImagePreview(null);
       if(commentFileInputRef.current)commentFileInputRef.current.value="";
