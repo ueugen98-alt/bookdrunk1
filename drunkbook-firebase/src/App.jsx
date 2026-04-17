@@ -361,6 +361,8 @@ export default function App() {
   const [unreadNotifs,setUnreadNotifs]=useState(0);
   const [lang,setLang]=useState(()=>{const saved=localStorage.getItem("db_lang");return saved&&LANGS[saved]?saved:"ro";});
   const L=LANGS[lang];
+  const [pwaPrompt,setPwaPrompt]=useState(null);
+  const [showPwaModal,setShowPwaModal]=useState(false);
   const messagesEndRef=useRef(null);
   const commentInputRef=useRef(null);
   const fileInputRef=useRef(null);
@@ -449,6 +451,16 @@ export default function App() {
 
   useEffect(()=>{if(showGlobalSearch)setTimeout(()=>searchRef.current?.focus(),100);},[showGlobalSearch]);
 
+  // PWA install prompt
+  useEffect(()=>{
+    const handler=(e)=>{
+      e.preventDefault();
+      setPwaPrompt(e);
+    };
+    window.addEventListener("beforeinstallprompt",handler);
+    return()=>window.removeEventListener("beforeinstallprompt",handler);
+  },[]);
+
   // Listen for in-app notifications from Firestore
   useEffect(()=>{
     if(!authUser||screen!=="app")return;
@@ -497,6 +509,15 @@ export default function App() {
   function showToast(msg){setToast(msg);setTimeout(()=>setToast(null),2800);}
 
   function changeLang(l){setLang(l);localStorage.setItem("db_lang",l);}
+
+  async function installPwa(){
+    if(!pwaPrompt)return;
+    pwaPrompt.prompt();
+    const result=await pwaPrompt.userChoice;
+    setPwaPrompt(null);
+    setShowPwaModal(false);
+    if(result.outcome==="accepted")showToast("DrunkBook instalat! 🍺");
+  }
 
   async function markNotifsRead(){
     const unread=notifications.filter(n=>!n.read);
@@ -721,6 +742,25 @@ export default function App() {
 
   return(
     <div style={S.root}>
+      {/* PWA Install Modal */}
+      {showPwaModal&&pwaPrompt&&(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:600,display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(6px)"}} onClick={()=>setShowPwaModal(false)}>
+        <div style={{background:"#141414",borderRadius:"22px 22px 0 0",width:"100%",maxWidth:480,padding:"24px 20px 36px",borderTop:"1px solid #2a2a2a"}} onClick={e=>e.stopPropagation()}>
+          <div style={{textAlign:"center",marginBottom:20}}>
+            <img src="/logo192.png" alt="DrunkBook" style={{width:80,height:80,borderRadius:18,marginBottom:14,boxShadow:"0 4px 20px rgba(245,166,35,0.4)"}}/>
+            <div style={{fontWeight:900,fontSize:22,color:"#f5a623",letterSpacing:2,marginBottom:6}}>DRUNKBOOK</div>
+            <div style={{color:"#aaa",fontSize:14,lineHeight:1.6}}>Instalează aplicația pe ecranul tău principal pentru acces rapid! 🍺</div>
+          </div>
+          <div style={{display:"flex",gap:10}}>
+            <button style={{flex:1,background:"#2a2a2a",border:"none",borderRadius:12,padding:"14px",color:"#888",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:15}} onClick={()=>{setShowPwaModal(false);localStorage.setItem("pwa_dismissed","1");}}>
+              Mai târziu
+            </button>
+            <button style={{flex:2,background:"linear-gradient(135deg,#f5a623,#e8890a)",border:"none",borderRadius:12,padding:"14px",color:"#111",fontWeight:800,cursor:"pointer",fontFamily:"Georgia,serif",fontSize:15,boxShadow:"0 4px 16px rgba(245,166,35,0.4)"}} onClick={installPwa}>
+              📲 Instalează Acum!
+            </button>
+          </div>
+        </div>
+      </div>)}
+
       {toast&&<div style={S.toast}>{toast}</div>}
       {lightboxImg&&(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setLightboxImg(null)}><img src={lightboxImg} alt="" style={{maxWidth:"95vw",maxHeight:"90vh",borderRadius:12,objectFit:"contain"}}/><button style={{position:"absolute",top:20,right:20,background:"#2a2a2a",border:"none",color:"#fff",width:36,height:36,borderRadius:"50%",fontSize:18,cursor:"pointer"}}>✕</button></div>)}
       {badgeTooltip&&(<div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"#1a1a1a",border:"1px solid #f5a623",borderRadius:16,padding:20,zIndex:400,textAlign:"center",minWidth:200}} onClick={()=>setBadgeTooltip(null)}><div style={{fontSize:48,marginBottom:8}}>{badgeTooltip.icon}</div><div style={{fontWeight:700,color:"#f5a623",fontSize:16,marginBottom:6}}>{badgeTooltip.name}</div><div style={{color:"#aaa",fontSize:13}}>{badgeTooltip.desc}</div><div style={{color:"#666",fontSize:11,marginTop:12}}>Apasă pentru a închide</div></div>)}
