@@ -16,6 +16,15 @@ import {
 
 const DRINKS = ["🍺","🍻","🥃","🍷","🍸","🍹","🥂","🍾"];
 const TITLES = ["Încă Sobru","Prima Bere","Al Doilea Rând","Vibe Check","Deja Fluent","Filozoful Barului","Regele Mesei","Legendă Vie"];
+const SECTORS = [
+  {id:"buiucani",  label:"Buiucani",   emoji:"🏘️"},
+  {id:"botanica",  label:"Botanica",   emoji:"🌿"},
+  {id:"centru",    label:"Centru",     emoji:"🏙️"},
+  {id:"telecentru",label:"Telecentru", emoji:"📡"},
+  {id:"ciocana",   label:"Ciocana",    emoji:"🏗️"},
+  {id:"rascanovca",label:"Râșcanovca", emoji:"🌆"},
+  {id:"suburbie",  label:"Suburbie",   emoji:"🌳"},
+];
 const IMGBB_KEY = "8a79556a7f61c84b45baf5005c507fe2";
 
 const CHALLENGE_TEMPLATES = [
@@ -304,6 +313,8 @@ export default function App() {
   const [posts,setPosts]=useState([]);
   const [newPost,setNewPost]=useState("");
   const [selectedDrink,setSelectedDrink]=useState("🍺");
+  const [selectedSector,setSelectedSector]=useState(null);
+  const [filterSector,setFilterSector]=useState(null);
   const [postImage,setPostImage]=useState(null);
   const [postImagePreview,setPostImagePreview]=useState(null);
   const [uploadingPost,setUploadingPost]=useState(false);
@@ -544,8 +555,8 @@ export default function App() {
           return;
         }
       }
-      await addDoc(collection(db,"posts"),{userId:authUser.uid,userName:profile.name,userEmoji:profile.emoji,text:newPost,drink:selectedDrink,likes:[],commentCount:0,imageUrl,createdAt:serverTimestamp()});
-      setNewPost("");removeImage();showToast(L.postPublished);
+      await addDoc(collection(db,"posts"),{userId:authUser.uid,userName:profile.name,userEmoji:profile.emoji,text:newPost,drink:selectedDrink,sector:selectedSector||null,likes:[],commentCount:0,imageUrl,createdAt:serverTimestamp()});
+      setNewPost("");removeImage();setSelectedSector(null);showToast(L.postPublished);
     }catch(e){showToast("Eroare: "+e.message);}
     setUploadingPost(false);
   }
@@ -833,6 +844,19 @@ export default function App() {
           <div style={S.composer}>
             <div style={{display:"flex",gap:10,marginBottom:10}}><span style={{fontSize:28}}>{profile?.emoji}</span><textarea style={S.composerInput} placeholder={L.composerPlaceholder} value={newPost} onChange={e=>setNewPost(e.target.value)} rows={2}/></div>
             {postImagePreview&&(<div style={{position:"relative",marginBottom:10}}><img src={postImagePreview} alt="" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:10}}/><button onClick={removeImage} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.7)",border:"none",color:"#fff",width:28,height:28,borderRadius:"50%",cursor:"pointer",fontSize:14}}>✕</button></div>)}
+
+            {/* Sector selector */}
+            <div style={{marginBottom:10}}>
+              <div style={{color:"#666",fontSize:12,marginBottom:6}}>📍 Sector (opțional):</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {SECTORS.map(s=>(
+                  <button key={s.id} style={{background:selectedSector===s.id?"#2a2000":"#1a1a1a",border:`1px solid ${selectedSector===s.id?"#f5a623":"#333"}`,borderRadius:20,padding:"5px 10px",color:selectedSector===s.id?"#f5a623":"#888",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",display:"flex",alignItems:"center",gap:4}} onClick={()=>setSelectedSector(selectedSector===s.id?null:s.id)}>
+                    <span>{s.emoji}</span><span>{s.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
                 {DRINKS.map(d=><button key={d} style={{...S.drinkBtn,...(selectedDrink===d?S.drinkBtnActive:{})}} onClick={()=>setSelectedDrink(d)}>{d}</button>)}
@@ -842,11 +866,23 @@ export default function App() {
               <button style={{...S.postBtn,opacity:uploadingPost?0.6:1}} onClick={submitPost} disabled={uploadingPost}>{uploadingPost?L.uploading:L.post}</button>
             </div>
           </div>
-          {posts.map(post=>(
+
+          {/* Filter bar */}
+          <div style={{marginBottom:12,overflowX:"auto",display:"flex",gap:6,paddingBottom:4}}>
+            <button style={{background:filterSector===null?"#f5a623":"#1a1a1a",border:`1px solid ${filterSector===null?"#f5a623":"#333"}`,borderRadius:20,padding:"6px 14px",color:filterSector===null?"#111":"#888",cursor:"pointer",fontSize:13,fontFamily:"Georgia,serif",whiteSpace:"nowrap",fontWeight:filterSector===null?700:400}} onClick={()=>setFilterSector(null)}>
+              🌍 Toate
+            </button>
+            {SECTORS.map(s=>(
+              <button key={s.id} style={{background:filterSector===s.id?"#f5a623":"#1a1a1a",border:`1px solid ${filterSector===s.id?"#f5a623":"#333"}`,borderRadius:20,padding:"6px 12px",color:filterSector===s.id?"#111":"#888",cursor:"pointer",fontSize:13,fontFamily:"Georgia,serif",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4,fontWeight:filterSector===s.id?700:400}} onClick={()=>setFilterSector(filterSector===s.id?null:s.id)}>
+                <span>{s.emoji}</span><span>{s.label}</span>
+              </button>
+            ))}
+          </div>
+          {posts.filter(p=>!filterSector||p.sector===filterSector).map(post=>(
             <div key={post.id} style={S.postCard}>
               <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:10}}>
                 <button style={S.postAvatar} onClick={()=>{const u=allUsers.find(u=>u.id===post.userId);if(u)setViewProfile(u);}}>{post.userEmoji}</button>
-                <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:"#f5a623"}}>{post.userName}</div><div style={{color:"#666",fontSize:12,display:"flex",alignItems:"center",gap:6}}>{post.drink} · {timeAgo(post.createdAt,L)}{(()=>{const u=allUsers.find(u=>u.id===post.userId);const st=getStatus(u,L);return st?<span style={{display:"inline-flex",alignItems:"center",gap:3}}><span style={{width:6,height:6,borderRadius:"50%",background:st.dot,display:"inline-block"}}/><span>{st.label}</span></span>:null;})()}</div></div>
+                <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:"#f5a623"}}>{post.userName}</div><div style={{color:"#666",fontSize:12,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{post.drink} · {timeAgo(post.createdAt,L)}{post.sector&&(()=>{const s=SECTORS.find(x=>x.id===post.sector);return s?<span style={{background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:10,padding:"1px 7px",color:"#f5a623",fontSize:11,display:"inline-flex",alignItems:"center",gap:3}}>{s.emoji} {s.label}</span>:null;})()}{(()=>{const u=allUsers.find(u=>u.id===post.userId);const st=getStatus(u,L);return st?<span style={{display:"inline-flex",alignItems:"center",gap:3}}><span style={{width:6,height:6,borderRadius:"50%",background:st.dot,display:"inline-block"}}/></span>:null;})()}</div></div>
                 {post.userId!==authUser.uid&&<button style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:"4px 8px"}} onClick={()=>{const u=allUsers.find(u=>u.id===post.userId);if(u)openChat(u);}}>💬</button>}
                 {post.userId===authUser.uid&&<button style={{background:"none",border:"none",cursor:"pointer",fontSize:16,padding:"4px 8px",color:"#666"}} onClick={()=>setConfirmDelete(post.id)}>🗑️</button>}
               </div>
@@ -886,7 +922,11 @@ export default function App() {
               )}
             </div>
           ))}
-          {posts.length===0&&<div style={S.emptyState}>{L.noPostsYet}</div>}
+          {posts.filter(p=>!filterSector||p.sector===filterSector).length===0&&(
+            <div style={S.emptyState}>
+              {filterSector?(()=>{const s=SECTORS.find(x=>x.id===filterSector);return<>{s?.emoji} Nicio postare din {s?.label} încă.<br/>Fii primul din sector!</>;})():L.noPostsYet}
+            </div>
+          )}
         </div>)}
 
         {/* MAP */}
