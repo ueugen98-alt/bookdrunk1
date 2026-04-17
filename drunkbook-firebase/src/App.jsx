@@ -208,13 +208,12 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick, active }) {
     } else { setLeafletLoaded(true); }
   }, []);
 
-  // Fix black map when tab becomes visible
+  // Fix black map - invalidate size after mount
   useEffect(() => {
-    if (!active || !mapInstanceRef.current) return;
-    setTimeout(() => {
-      mapInstanceRef.current.invalidateSize();
-    }, 100);
-  }, [active]);
+    if (!mapInstanceRef.current) return;
+    setTimeout(() => mapInstanceRef.current?.invalidateSize(), 200);
+    setTimeout(() => mapInstanceRef.current?.invalidateSize(), 600);
+  }, [active, leafletLoaded]);
 
   useEffect(() => {
     if (!leafletLoaded || !mapRef.current || mapInstanceRef.current) return;
@@ -980,16 +979,16 @@ export default function App() {
         </div>)}
 
         {/* MAP */}
-        {/* MAP - always mounted to prevent re-init */}
-        <div style={{display:tab==="map"?"block":"none"}}>
-          {!geo&&tab==="map"&&(<div style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:16,marginBottom:12,textAlign:"center"}}>
+        {/* MAP */}
+        {tab==="map"&&(<div>
+          {!geo&&(<div style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:16,marginBottom:12,textAlign:"center"}}>
             <div style={{fontSize:32,marginBottom:8}}>🗺️</div>
             <div style={{color:"#e8e0d0",fontWeight:700,marginBottom:6}}>Activează locația</div>
             <button style={S.geoBtn} onClick={requestGeo}>📍 Activează Locația</button>
             {geoError&&<div style={{color:"#e87070",fontSize:13,marginTop:8}}>{geoError}</div>}
           </div>)}
-          <LiveMap allUsers={allUsers} currentUser={authUser} geo={geo} onUserClick={(u)=>setViewProfile(u)} active={tab==="map"}/>
-        </div>
+          <LiveMap allUsers={allUsers} currentUser={authUser} geo={geo} onUserClick={(u)=>setViewProfile(u)} active={true}/>
+        </div>)}
 
         {/* NEARBY */}
         {tab==="nearby"&&(<div>
