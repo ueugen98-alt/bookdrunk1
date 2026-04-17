@@ -835,20 +835,20 @@ export default function App() {
       </div>)}
 
       <div style={S.header}>
-        <span style={{fontWeight:900,fontSize:18,letterSpacing:3,color:"#f5a623"}}>🍺 DRUNKBOOK</span>
-        <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          {/* Lang selector */}
-          <div style={{display:"flex",background:"#1a1a1a",borderRadius:20,padding:2,gap:2}}>
+        <span style={{fontWeight:900,fontSize:17,letterSpacing:2,color:"#f5a623"}}>🍺 DRUNKBOOK</span>
+        <div style={{display:"flex",gap:5,alignItems:"center"}}>
+          {/* Lang selector - compact */}
+          <div style={{display:"flex",background:"#1a1a1a",borderRadius:20,padding:2,gap:1}}>
             {Object.entries(LANGS).map(([key,val])=>(
-              <button key={key} style={{background:lang===key?"#f5a623":"none",border:"none",borderRadius:18,padding:"4px 7px",cursor:"pointer",fontSize:14,fontWeight:lang===key?700:400,transition:"all 0.2s"}} onClick={()=>changeLang(key)} title={val.name}>{val.flag}</button>
+              <button key={key} style={{background:lang===key?"#f5a623":"none",border:"none",borderRadius:18,padding:"3px 6px",cursor:"pointer",fontSize:13,fontWeight:lang===key?700:400,transition:"all 0.2s",minWidth:28,minHeight:28}} onClick={()=>changeLang(key)} title={val.name}>{val.flag}</button>
             ))}
           </div>
-          <button style={{background:"#1e1e1e",border:"1px solid #2a2a2a",borderRadius:"50%",width:38,height:38,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#888"}} onClick={()=>setShowGlobalSearch(true)}>🔍</button>
-          <div style={{position:"relative"}}>
-            <button style={{background:"#1e1e1e",border:"1px solid #2a2a2a",borderRadius:"50%",width:38,height:38,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#888"}} onClick={()=>{setShowNotifs(v=>!v);if(!showNotifs)markNotifsRead();}}>🔔</button>
-            {unreadNotifs>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#e87070",color:"#fff",borderRadius:"50%",width:18,height:18,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,pointerEvents:"none"}}>{unreadNotifs>9?"9+":unreadNotifs}</span>}
+          <button style={{background:"#1e1e1e",border:"1px solid #2a2a2a",borderRadius:"50%",width:34,height:34,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#888",flexShrink:0}} onClick={()=>setShowGlobalSearch(true)}>🔍</button>
+          <div style={{position:"relative",flexShrink:0}}>
+            <button style={{background:"#1e1e1e",border:"1px solid #2a2a2a",borderRadius:"50%",width:34,height:34,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#888"}} onClick={()=>{setShowNotifs(v=>!v);if(!showNotifs)markNotifsRead();}}>🔔</button>
+            {unreadNotifs>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#e87070",color:"#fff",borderRadius:"50%",width:17,height:17,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,pointerEvents:"none"}}>{unreadNotifs>9?"9+":unreadNotifs}</span>}
           </div>
-          <button style={S.avatarBtn} onClick={()=>setViewProfile({...profile,id:authUser.uid})}>{profile?.emoji}</button>
+          <button style={{...S.avatarBtn,width:34,height:34,fontSize:18,flexShrink:0}} onClick={()=>setViewProfile({...profile,id:authUser.uid})}>{profile?.emoji}</button>
         </div>
       </div>
 
@@ -1284,7 +1284,7 @@ const S={
   emojiGrid:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10},
   emojiBtn:{fontSize:32,background:"#1a1a1a",border:"2px solid #2a2a2a",borderRadius:14,padding:"14px",cursor:"pointer",minHeight:64,WebkitAppearance:"none"},
   emojiBtnActive:{border:"2px solid #f5a623",background:"#2a2000"},
-  header:{position:"sticky",top:0,zIndex:50,background:"rgba(15,15,15,0.97)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",borderBottom:"1px solid #1e1e1e",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px"},
+  header:{position:"sticky",top:0,zIndex:50,background:"rgba(15,15,15,0.97)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",borderBottom:"1px solid #1e1e1e",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",overflow:"hidden"},
   avatarBtn:{background:"#1e1e1e",border:"1px solid #2a2a2a",borderRadius:"50%",width:42,height:42,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",minWidth:42},
   content:{padding:"12px 14px",paddingBottom:90},
   composer:{background:"#171717",border:"1px solid #242424",borderRadius:16,padding:14,marginBottom:14},
