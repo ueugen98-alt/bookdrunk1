@@ -68,7 +68,20 @@ function getChatId(a,b){return [a,b].sort().join("_");}
 function setCookie(n,v,d=365){document.cookie=`${n}=${encodeURIComponent(v)};path=/;max-age=${d*86400};SameSite=Lax`;}
 function getCookie(n){return decodeURIComponent(document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith(n+'='))?.split('=')[1]||'');}
 function deleteCookie(n){document.cookie=`${n}=;path=/;max-age=0`;}
-async function uploadToImgbb(file){const fd=new FormData();fd.append('image',file);const r=await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`,{method:'POST',body:fd});const d=await r.json();if(d.success)return d.data.url;throw new Error('Upload failed');}
+async function uploadToImgbb(file){
+  try{
+    const fd=new FormData();
+    fd.append('image',file);
+    const r=await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`,{method:'POST',body:fd});
+    const d=await r.json();
+    if(d.success)return d.data.url;
+    console.error('Imgbb error:',d);
+    throw new Error(d.error?.message||'Upload failed');
+  }catch(e){
+    console.error('Upload exception:',e);
+    throw e;
+  }
+}
 
 // ===== SPIN THE BOTTLE COMPONENT =====
 function SpinBottle({ allUsers, currentUser, onSpun, profile }) {
@@ -466,10 +479,19 @@ export default function App() {
     setUploadingPost(true);
     try{
       let imageUrl=null;
-      if(postImage){showToast("Se încarcă poza... 📸");imageUrl=await uploadToImgbb(postImage);}
+      if(postImage){
+        showToast("Se încarcă poza... 📸");
+        try{
+          imageUrl=await uploadToImgbb(postImage);
+        }catch(e){
+          showToast("Eroare upload poză: "+e.message);
+          setUploadingPost(false);
+          return;
+        }
+      }
       await addDoc(collection(db,"posts"),{userId:authUser.uid,userName:profile.name,userEmoji:profile.emoji,text:newPost,drink:selectedDrink,likes:[],commentCount:0,imageUrl,createdAt:serverTimestamp()});
       setNewPost("");removeImage();showToast("Postare publicată! 🍻");
-    }catch(e){showToast("Eroare la upload!");}
+    }catch(e){showToast("Eroare: "+e.message);}
     setUploadingPost(false);
   }
 
