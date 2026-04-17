@@ -893,11 +893,12 @@ export default function App() {
         {tab==="fun"&&(<div>
           {/* Sub-tabs */}
           <div style={{display:"flex",background:"#1a1a1a",borderRadius:12,padding:4,gap:4,marginBottom:16}}>
-            <button style={{flex:1,background:funTab==="challenges"?"#f5a623":"none",color:funTab==="challenges"?"#111":"#888",border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:700,fontSize:14,position:"relative"}} onClick={()=>setFunTab("challenges")}>
+            <button style={{flex:1,background:funTab==="challenges"?"#f5a623":"none",color:funTab==="challenges"?"#111":"#888",border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:700,fontSize:13,position:"relative"}} onClick={()=>setFunTab("challenges")}>
               🎯 Provocări
               {pendingChallenges>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#e87070",color:"#fff",borderRadius:"50%",width:18,height:18,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>{pendingChallenges}</span>}
             </button>
-            <button style={{flex:1,background:funTab==="spin"?"#f5a623":"none",color:funTab==="spin"?"#111":"#888",border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:700,fontSize:14}} onClick={()=>setFunTab("spin")}>🍾 Spin</button>
+            <button style={{flex:1,background:funTab==="spin"?"#f5a623":"none",color:funTab==="spin"?"#111":"#888",border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:700,fontSize:13}} onClick={()=>setFunTab("spin")}>🍾 Spin</button>
+            <button style={{flex:1,background:funTab==="top"?"#f5a623":"none",color:funTab==="top"?"#111":"#888",border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:700,fontSize:13}} onClick={()=>setFunTab("top")}>🏆 Top</button>
           </div>
 
           {/* CHALLENGES */}
@@ -944,6 +945,39 @@ export default function App() {
           {funTab==="spin"&&(
             <SpinBottle allUsers={allUsers} currentUser={authUser} profile={profile} onSpun={(winner)=>{showToast(`🍾 Sticla l-a ales pe ${winner.name}!`);}}/>
           )}
+
+          {/* TOP / LEADERBOARD */}
+          {funTab==="top"&&(<div>
+            {myStats&&(<div style={{background:"linear-gradient(135deg,#1a1200,#2a2000)",border:"1px solid #f5a623",borderRadius:16,padding:16,marginBottom:20}}>
+              <div style={{color:"#f5a623",fontSize:12,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Statisticile Tale</div>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+                <div style={{fontSize:40}}>{myStats.emoji}</div>
+                <div><div style={{fontWeight:800,fontSize:18,color:"#f5a623"}}>{myStats.name}</div><div style={{color:"#888",fontSize:13}}>Locul #{myRank} în clasament</div></div>
+                <div style={{marginLeft:"auto",textAlign:"center"}}><div style={{fontSize:28,fontWeight:900,color:"#f5a623"}}>{myStats.score}</div><div style={{color:"#888",fontSize:11}}>puncte</div></div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+                {[{icon:"🍻",val:myStats.totalLikes,label:"Cheers"},{icon:"📝",val:myStats.totalPosts,label:"Postări"},{icon:"💬",val:myStats.totalComments,label:"Comentarii"},{icon:"🎯",val:challenges.filter(c=>c.toId===authUser.uid&&c.status==="completed").length,label:"Provocări"}].map(s=>(<div key={s.label} style={{background:"rgba(0,0,0,0.3)",borderRadius:10,padding:"8px 4px",textAlign:"center"}}><div style={{fontSize:18}}>{s.icon}</div><div style={{fontWeight:800,fontSize:16,color:"#f5a623"}}>{s.val}</div><div style={{color:"#888",fontSize:10}}>{s.label}</div></div>))}
+              </div>
+              <div style={{borderTop:"1px solid #333",paddingTop:12}}>
+                <div style={{color:"#888",fontSize:12,marginBottom:8}}>Badge-urile tale:</div>
+                {myStats.badges.length===0&&<div style={{color:"#555",fontSize:13,fontStyle:"italic"}}>Încă niciun badge. Fii mai activ! 🍺</div>}
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>{myStats.badges.map(bid=>{const b=BADGE_DEFS.find(x=>x.id===bid);if(!b)return null;return(<button key={bid} style={{background:"#1e1e1e",border:"1px solid #333",borderRadius:20,padding:"6px 12px",display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:"#e8e0d0",fontSize:13}} onClick={()=>setBadgeTooltip(b)}><span>{b.icon}</span><span>{b.name}</span></button>);})}</div>
+              </div>
+            </div>)}
+            <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>🏆 Clasament</div>
+            {leaderboard.map((u,i)=>(<div key={u.id} style={{...S.postCard,borderColor:i===0?"#f5a623":i===1?"#888":i===2?"#cd7f32":"#242424",cursor:"pointer"}} onClick={()=>setViewProfile(u)}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{fontSize:24,width:32,textAlign:"center",fontWeight:900,color:i===0?"#f5a623":i===1?"#aaa":i===2?"#cd7f32":"#666"}}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":`#${i+1}`}</div>
+                <span style={{fontSize:28}}>{u.emoji}</span>
+                <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:u.id===authUser.uid?"#f5a623":"#e8e0d0"}}>{u.name} {u.id===authUser.uid&&"(tu)"}</div><div style={{display:"flex",gap:8,marginTop:4}}>{u.badges.slice(0,3).map(bid=>{const b=BADGE_DEFS.find(x=>x.id===bid);return b?<span key={bid}>{b.icon}</span>:null;})}</div></div>
+                <div style={{textAlign:"right"}}><div style={{fontWeight:800,fontSize:18,color:"#f5a623"}}>{u.score}</div><div style={{color:"#888",fontSize:11}}>🍻{u.totalLikes} 🎯{challenges.filter(c=>(c.fromId===u.id||c.toId===u.id)&&c.status==="completed").length}</div></div>
+              </div>
+            </div>))}
+            <div style={{marginTop:24,borderTop:"1px solid #1e1e1e",paddingTop:16}}>
+              <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Toate Badge-urile</div>
+              {BADGE_DEFS.map(b=>(<div key={b.id} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}><span style={{fontSize:24,width:30,textAlign:"center"}}>{b.icon}</span><div><div style={{fontWeight:700,fontSize:14}}>{b.name}</div><div style={{color:"#888",fontSize:12}}>{b.desc}</div></div></div>))}
+            </div>
+          </div>)}
         </div>)}
 
         {/* LEADERBOARD */}
