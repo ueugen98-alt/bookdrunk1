@@ -328,6 +328,9 @@ export default function App() {
   const [funTab,setFunTab]=useState("challenges"); // challenges | spin
   const [pendingChallenges,setPendingChallenges]=useState(0);
   const [notifPermission,setNotifPermission]=useState(typeof Notification!=="undefined"?Notification.permission:"default");
+  const [notifications,setNotifications]=useState([]);
+  const [showNotifs,setShowNotifs]=useState(false);
+  const [unreadNotifs,setUnreadNotifs]=useState(0);
   const messagesEndRef=useRef(null);
   const commentInputRef=useRef(null);
   const fileInputRef=useRef(null);
@@ -403,6 +406,17 @@ export default function App() {
 
   useEffect(()=>{if(showGlobalSearch)setTimeout(()=>searchRef.current?.focus(),100);},[showGlobalSearch]);
 
+  // Listen for in-app notifications from Firestore
+  useEffect(()=>{
+    if(!authUser||screen!=="app")return;
+    const q=query(collection(db,"notifications"),where("toId","==",authUser.uid),orderBy("createdAt","desc"));
+    return onSnapshot(q,snap=>{
+      const notifs=snap.docs.map(d=>({id:d.id,...d.data()}));
+      setNotifications(notifs);
+      setUnreadNotifs(notifs.filter(n=>!n.read).length);
+    });
+  },[authUser,screen]);
+
   // Listen for foreground notifications
   useEffect(()=>{
     if(!messaging)return;
@@ -438,6 +452,13 @@ export default function App() {
   }
 
   function showToast(msg){setToast(msg);setTimeout(()=>setToast(null),2800);}
+
+  async function markNotifsRead(){
+    const unread=notifications.filter(n=>!n.read);
+    for(const n of unread){
+      await updateDoc(doc(db,"notifications",n.id),{read:true}).catch(()=>{});
+    }
+  }
 
   async function handleAuth(){
     try{
@@ -495,7 +516,17 @@ export default function App() {
     setUploadingPost(false);
   }
 
-  async function toggleLike(postId,likes){const uid=authUser.uid;await updateDoc(doc(db,"posts",postId),{likes:likes.includes(uid)?likes.filter(l=>l!==uid):[...likes,uid]});}
+  async function toggleLike(postId,likes){
+    const uid=authUser.uid;
+    const alreadyLiked=likes.includes(uid);
+    await updateDoc(doc(db,"posts",postId),{likes:alreadyLiked?likes.filter(l=>l!==uid):[...likes,uid]});
+    if(!alreadyLiked){
+      const post=posts.find(p=>p.id===postId);
+      if(post&&post.userId!==uid){
+        await addDoc(collection(db,"notifications"),{toId:post.userId,fromId:uid,fromName:profile.name,fromEmoji:profile.emoji,type:"cheers",text:`${profile.name} ți-a dat cheers la postarea ta! 🍻`,read:false,createdAt:serverTimestamp()});
+      }
+    }
+  }
   async function deletePost(postId){await deleteDoc(doc(db,"posts",postId));setConfirmDelete(null);showToast("Postare ștearsă! 🗑️");}
 
   async function submitComment(postId){
@@ -514,17 +545,13 @@ export default function App() {
     setReviewTarget(null);setReviewText("");setReviewRating(5);showToast("Recenzie trimisă! ⭐");
   }
 
-  async function sendPushNotification(toUserId, title, body){
+  async function sendInAppNotification(toUserId, type, text){
     try{
-      const userSnap=await getDoc(doc(db,"users",toUserId));
-      const fcmToken=userSnap.data()?.fcmToken;
-      if(!fcmToken)return;
-      // Store notification in Firestore for the user
       await addDoc(collection(db,"notifications"),{
-        toId:toUserId,fromId:authUser.uid,fromName:profile.name,
-        title,body,read:false,createdAt:serverTimestamp(),
+        toId:toUserId,fromId:authUser.uid,fromName:profile.name,fromEmoji:profile.emoji,
+        type,text,read:false,createdAt:serverTimestamp(),
       });
-    }catch(e){console.log("Push error:",e);}
+    }catch(e){console.log("Notif error:",e);}
   }
 
   async function sendMessage(){
@@ -533,7 +560,7 @@ export default function App() {
     await addDoc(collection(db,"chats",chatId,"messages"),{text:newMsg,senderId:authUser.uid,senderName:profile.name,senderEmoji:profile.emoji,createdAt:serverTimestamp()});
     await setDoc(doc(db,"conversations",chatId),{participants:[authUser.uid,chatWith.id],participantNames:{[authUser.uid]:profile.name,[chatWith.id]:chatWith.name},participantEmojis:{[authUser.uid]:profile.emoji,[chatWith.id]:chatWith.emoji},lastMessage:newMsg,lastSenderId:authUser.uid,lastMessageAt:serverTimestamp(),readBy:[authUser.uid]},{merge:true});
     setNewMsg("");
-    sendPushNotification(chatWith.id, `💬 ${profile.name}`, newMsg.slice(0,80));
+    sendInAppNotification(chatWith.id,"message",`${profile.name} ți-a trimis un mesaj: "${newMsg.slice(0,50)}${newMsg.length>50?"...":""}"`);
   }
 
   async function saveProfile(){
@@ -559,7 +586,7 @@ export default function App() {
     });
     setShowChallengeModal(false);setChallengeText("");setChallengeTarget(null);
     showToast(`Provocare trimisă lui ${challengeTarget.name}! 🎯`);
-    sendPushNotification(challengeTarget.id, `🎯 ${profile.name} te provoacă!`, challengeText.slice(0,80));
+    sendInAppNotification(challengeTarget.id,"challenge",`${profile.name} te provoacă: "${challengeText.slice(0,50)}${challengeText.length>50?"...":""}"`);
   }
 
   async function respondChallenge(challengeId,accept){
@@ -708,9 +735,39 @@ export default function App() {
         <span style={{fontWeight:900,fontSize:18,letterSpacing:3,color:"#f5a623"}}>🍺 DRUNKBOOK</span>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <button style={{background:"#1e1e1e",border:"1px solid #2a2a2a",borderRadius:"50%",width:38,height:38,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#888"}} onClick={()=>setShowGlobalSearch(true)}>🔍</button>
+          {/* Notification Bell */}
+          <div style={{position:"relative"}}>
+            <button style={{background:"#1e1e1e",border:"1px solid #2a2a2a",borderRadius:"50%",width:38,height:38,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#888"}} onClick={()=>{setShowNotifs(v=>!v);if(!showNotifs)markNotifsRead();}}>🔔</button>
+            {unreadNotifs>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#e87070",color:"#fff",borderRadius:"50%",width:18,height:18,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,pointerEvents:"none"}}>{unreadNotifs>9?"9+":unreadNotifs}</span>}
+          </div>
           <button style={S.avatarBtn} onClick={()=>setViewProfile({...profile,id:authUser.uid})}>{profile?.emoji}</button>
         </div>
       </div>
+
+      {/* Notifications Dropdown */}
+      {showNotifs&&(<div style={{position:"fixed",top:62,right:8,width:320,maxWidth:"calc(100vw - 16px)",background:"#141414",border:"1px solid #2a2a2a",borderRadius:16,zIndex:150,boxShadow:"0 8px 32px rgba(0,0,0,0.6)",maxHeight:420,overflow:"hidden",display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"14px 16px",borderBottom:"1px solid #242424",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{fontWeight:700,color:"#f5a623",fontSize:15}}>🔔 Notificări</span>
+          <button style={{background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:14}} onClick={()=>setShowNotifs(false)}>✕</button>
+        </div>
+        <div style={{overflowY:"auto",flex:1}}>
+          {notifications.length===0&&<div style={{padding:24,textAlign:"center",color:"#666",fontStyle:"italic",fontSize:14}}>Nicio notificare încă 🍺</div>}
+          {notifications.map(n=>(
+            <div key={n.id} style={{padding:"12px 16px",borderBottom:"1px solid #1e1e1e",display:"flex",gap:10,alignItems:"flex-start",background:n.read?"transparent":"rgba(245,166,35,0.05)",cursor:"pointer"}} onClick={()=>{setShowNotifs(false);if(n.type==="message"){const u=allUsers.find(u=>u.id===n.fromId);if(u)openChat(u);}else if(n.type==="challenge"){setTab("fun");setFunTab("challenges");}else{setTab("feed");}}}>
+              <span style={{fontSize:24,flexShrink:0}}>{n.fromEmoji||"🍺"}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,color:n.read?"#aaa":"#e8e0d0",lineHeight:1.5}}>{n.text}</div>
+                <div style={{fontSize:11,color:"#666",marginTop:4}}>{timeAgo(n.createdAt)}</div>
+              </div>
+              {!n.read&&<div style={{width:8,height:8,borderRadius:"50%",background:"#f5a623",flexShrink:0,marginTop:4}}/>}
+            </div>
+          ))}
+        </div>
+        {notifications.length>0&&<div style={{padding:"10px 16px",borderTop:"1px solid #242424",textAlign:"center"}}>
+          <button style={{background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:12}} onClick={async()=>{for(const n of notifications)await updateDoc(doc(db,"notifications",n.id),{read:true}).catch(()=>{});}}>Marchează toate ca citite</button>
+        </div>}
+      </div>)}
+      {showNotifs&&<div style={{position:"fixed",inset:0,zIndex:149}} onClick={()=>setShowNotifs(false)}/>}
 
       <div style={S.content}>
 
