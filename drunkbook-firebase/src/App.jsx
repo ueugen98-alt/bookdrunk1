@@ -681,7 +681,7 @@ export default function App() {
 
   const myChallenges=challenges.filter(c=>c.fromId===authUser?.uid||c.toId===authUser?.uid);
 
-  if(screen==="splash")return(<div style={S.splash}><div style={S.splashGlow}/><div style={{textAlign:"center",zIndex:1}}><div style={{fontSize:72,marginBottom:12}}>🍺</div><div style={S.splashTitle}>DRUNKBOOK</div><div style={{color:"#888",fontSize:13,marginTop:8,letterSpacing:2}}>${L.appTagline}</div><div style={S.splashLoader}><div style={S.splashBar}/></div></div></div>);
+  if(screen==="splash")return(<div style={S.splash}><div style={S.splashGlow}/><div style={{textAlign:"center",zIndex:1}}><div style={{fontSize:72,marginBottom:12}}>🍺</div><div style={S.splashTitle}>DRUNKBOOK</div><div style={{color:"#888",fontSize:13,marginTop:8,letterSpacing:2}}>{L.appTagline}</div><div style={S.splashLoader}><div style={S.splashBar}/></div></div></div>);
   if(loading)return(<div style={{...S.splash}}><div style={{fontSize:40}}>🍺</div><div style={{color:"#f5a623",marginTop:12}}>{L.uploading}</div></div>);
 
   if(screen==="auth")return(
@@ -839,7 +839,7 @@ export default function App() {
                 <button style={{...S.drinkBtn,color:"#f5a623",borderColor:"#f5a623",fontSize:18}} onClick={()=>fileInputRef.current?.click()}>📸</button>
                 <input ref={fileInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleImageSelect}/>
               </div>
-              <button style={{...S.postBtn,opacity:uploadingPost?0.6:1}} onClick={submitPost} disabled={uploadingPost}>{uploadingPost?{L.uploading}:{L.post}}</button>
+              <button style={{...S.postBtn,opacity:uploadingPost?0.6:1}} onClick={submitPost} disabled={uploadingPost}>{uploadingPost?L.uploading:L.post}</button>
             </div>
           </div>
           {posts.map(post=>(
