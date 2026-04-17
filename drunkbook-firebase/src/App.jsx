@@ -185,7 +185,7 @@ function SpinBottle({ allUsers, currentUser, onSpun, profile, L }) {
 }
 
 // ===== LIVE MAP COMPONENT =====
-function LiveMap({ allUsers, currentUser, geo, onUserClick }) {
+function LiveMap({ allUsers, currentUser, geo, onUserClick, active }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef({});
@@ -208,13 +208,23 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick }) {
     } else { setLeafletLoaded(true); }
   }, []);
 
+  // Fix black map when tab becomes visible
+  useEffect(() => {
+    if (!active || !mapInstanceRef.current) return;
+    setTimeout(() => {
+      mapInstanceRef.current.invalidateSize();
+    }, 100);
+  }, [active]);
+
   useEffect(() => {
     if (!leafletLoaded || !mapRef.current || mapInstanceRef.current) return;
-    const center = geo ? [geo.lat, geo.lon] : [44.4268, 26.1025];
+    const center = geo ? [geo.lat, geo.lon] : [47.0245, 28.8322]; // Chișinău default
     const map = window.L.map(mapRef.current, { zoomControl: true, attributionControl: false }).setView(center, 13);
     window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
     mapInstanceRef.current = map;
-  }, [leafletLoaded, geo]);
+    // Invalidate after mount too
+    setTimeout(() => map.invalidateSize(), 300);
+  }, [leafletLoaded]);
 
   useEffect(() => {
     if (!mapInstanceRef.current || !window.L) return;
@@ -970,15 +980,16 @@ export default function App() {
         </div>)}
 
         {/* MAP */}
-        {tab==="map"&&(<div>
-          {!geo&&(<div style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:16,marginBottom:12,textAlign:"center"}}>
+        {/* MAP - always mounted to prevent re-init */}
+        <div style={{display:tab==="map"?"block":"none"}}>
+          {!geo&&tab==="map"&&(<div style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:16,marginBottom:12,textAlign:"center"}}>
             <div style={{fontSize:32,marginBottom:8}}>🗺️</div>
             <div style={{color:"#e8e0d0",fontWeight:700,marginBottom:6}}>Activează locația</div>
             <button style={S.geoBtn} onClick={requestGeo}>📍 Activează Locația</button>
             {geoError&&<div style={{color:"#e87070",fontSize:13,marginTop:8}}>{geoError}</div>}
           </div>)}
-          <LiveMap allUsers={allUsers} currentUser={authUser} geo={geo} onUserClick={(u)=>setViewProfile(u)}/>
-        </div>)}
+          <LiveMap allUsers={allUsers} currentUser={authUser} geo={geo} onUserClick={(u)=>setViewProfile(u)} active={tab==="map"}/>
+        </div>
 
         {/* NEARBY */}
         {tab==="nearby"&&(<div>
