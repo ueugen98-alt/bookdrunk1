@@ -311,6 +311,9 @@ export default function App() {
   const [openComments,setOpenComments]=useState(null);
   const [comments,setComments]=useState({});
   const [newComment,setNewComment]=useState("");
+  const [commentImage,setCommentImage]=useState(null);
+  const [commentImagePreview,setCommentImagePreview]=useState(null);
+  const [uploadingComment,setUploadingComment]=useState(false);
   const [lightboxImg,setLightboxImg]=useState(null);
   const [badgeTooltip,setBadgeTooltip]=useState(null);
   const [searchQuery,setSearchQuery]=useState("");
@@ -334,6 +337,7 @@ export default function App() {
   const messagesEndRef=useRef(null);
   const commentInputRef=useRef(null);
   const fileInputRef=useRef(null);
+  const commentFileInputRef=useRef(null);
   const searchRef=useRef(null);
 
   useEffect(()=>{
@@ -530,10 +534,23 @@ export default function App() {
   async function deletePost(postId){await deleteDoc(doc(db,"posts",postId));setConfirmDelete(null);showToast("Postare ștearsă! 🗑️");}
 
   async function submitComment(postId){
-    if(!newComment.trim())return;
-    await addDoc(collection(db,"posts",postId,"comments"),{userId:authUser.uid,userName:profile.name,userEmoji:profile.emoji,text:newComment,createdAt:serverTimestamp()});
-    await updateDoc(doc(db,"posts",postId),{commentCount:(posts.find(p=>p.id===postId)?.commentCount||0)+1});
-    setNewComment("");showToast("Comentariu adăugat! 💬");
+    if(!newComment.trim()&&!commentImage)return;
+    setUploadingComment(true);
+    try{
+      let imageUrl=null;
+      if(commentImage){
+        showToast("Se încarcă poza... 📸");
+        try{ imageUrl=await uploadToImgbb(commentImage); }
+        catch(e){ showToast("Eroare upload: "+e.message); setUploadingComment(false); return; }
+      }
+      await addDoc(collection(db,"posts",postId,"comments"),{userId:authUser.uid,userName:profile.name,userEmoji:profile.emoji,text:newComment,imageUrl,createdAt:serverTimestamp()});
+      await updateDoc(doc(db,"posts",postId),{commentCount:(posts.find(p=>p.id===postId)?.commentCount||0)+1});
+      setNewComment("");
+      setCommentImage(null);setCommentImagePreview(null);
+      if(commentFileInputRef.current)commentFileInputRef.current.value="";
+      showToast("Comentariu adăugat! 💬");
+    }catch(e){showToast("Eroare: "+e.message);}
+    setUploadingComment(false);
   }
 
   async function submitReview(){
@@ -802,12 +819,28 @@ export default function App() {
               </div>
               {openComments===post.id&&(
                 <div style={{marginTop:12,borderTop:"1px solid #242424",paddingTop:12}}>
-                  {(comments[post.id]||[]).map(c=>(<div key={c.id} style={{display:"flex",gap:8,marginBottom:10}}><span style={{fontSize:20,flexShrink:0}}>{c.userEmoji}</span><div style={{background:"#1e1e1e",borderRadius:"4px 12px 12px 12px",padding:"8px 12px",flex:1}}><div style={{fontWeight:700,fontSize:12,color:"#f5a623",marginBottom:3}}>{c.userName} <span style={{color:"#555",fontWeight:400}}>· {timeAgo(c.createdAt)}</span></div><div style={{fontSize:14,color:"#ddd",lineHeight:1.5}}>{c.text}</div></div></div>))}
+                  {(comments[post.id]||[]).map(c=>(<div key={c.id} style={{display:"flex",gap:8,marginBottom:10}}>
+                    <span style={{fontSize:20,flexShrink:0}}>{c.userEmoji}</span>
+                    <div style={{background:"#1e1e1e",borderRadius:"4px 12px 12px 12px",padding:"8px 12px",flex:1}}>
+                      <div style={{fontWeight:700,fontSize:12,color:"#f5a623",marginBottom:3}}>{c.userName} <span style={{color:"#555",fontWeight:400}}>· {timeAgo(c.createdAt)}</span></div>
+                      {c.text&&<div style={{fontSize:14,color:"#ddd",lineHeight:1.5}}>{c.text}</div>}
+                      {c.imageUrl&&<img src={c.imageUrl} alt="" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:8,marginTop:6,cursor:"pointer"}} onClick={()=>setLightboxImg(c.imageUrl)}/>}
+                    </div>
+                  </div>))}
                   {(comments[post.id]||[]).length===0&&<div style={{color:"#555",fontSize:13,fontStyle:"italic",marginBottom:10}}>Fii primul care comentează! 🍺</div>}
+                  {/* Comment image preview */}
+                  {commentImagePreview&&openComments===post.id&&(
+                    <div style={{position:"relative",marginBottom:8,marginLeft:30}}>
+                      <img src={commentImagePreview} alt="" style={{width:"100%",maxHeight:150,objectFit:"cover",borderRadius:10}}/>
+                      <button onClick={()=>{setCommentImage(null);setCommentImagePreview(null);if(commentFileInputRef.current)commentFileInputRef.current.value="";}} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.7)",border:"none",color:"#fff",width:26,height:26,borderRadius:"50%",cursor:"pointer",fontSize:13}}>✕</button>
+                    </div>
+                  )}
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    <span style={{fontSize:22}}>{profile?.emoji}</span>
-                    <input ref={commentInputRef} style={{...S.input,flex:1,padding:"8px 12px",fontSize:14}} placeholder="Adaugă un comentariu..." value={newComment} onChange={e=>setNewComment(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitComment(post.id)}/>
-                    <button style={{...S.postBtn,padding:"8px 12px",fontSize:16}} onClick={()=>submitComment(post.id)}>→</button>
+                    <span style={{fontSize:22,flexShrink:0}}>{profile?.emoji}</span>
+                    <input ref={commentInputRef} style={{...S.input,flex:1,padding:"8px 12px",fontSize:14}} placeholder="Adaugă un comentariu..." value={newComment} onChange={e=>setNewComment(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submitComment(post.id);}}}/>
+                    <button style={{...S.drinkBtn,color:"#f5a623",borderColor:"#f5a623",fontSize:16,padding:"6px 8px"}} onClick={()=>commentFileInputRef.current?.click()}>📸</button>
+                    <input ref={commentFileInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const file=e.target.files[0];if(!file)return;if(file.size>10*1024*1024){showToast("Max 10MB!");return;}setCommentImage(file);setCommentImagePreview(URL.createObjectURL(file));}}/>
+                    <button style={{...S.postBtn,padding:"8px 12px",fontSize:16,opacity:uploadingComment?0.6:1}} onClick={()=>submitComment(post.id)} disabled={uploadingComment}>{uploadingComment?"⏳":"→"}</button>
                   </div>
                 </div>
               )}
