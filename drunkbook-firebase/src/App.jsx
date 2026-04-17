@@ -1091,7 +1091,19 @@ export default function App() {
           <div style={{marginTop:20}}>
             <input style={{...S.input,marginBottom:12}} placeholder={L.searchUsers} value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
             <div style={{color:"#888",fontSize:13,marginBottom:10}}>{searchQuery?`Rezultate pentru "${searchQuery}":`:"Toți utilizatorii:"}</div>
-            {filteredUsers.map(u=>(<div key={u.id} style={{...S.nearbyCard,cursor:"pointer"}} onClick={()=>setChatWith(u)}><span style={{fontSize:28}}>{u.emoji}</span><div style={{flex:1}}><div style={{fontWeight:700,fontSize:14}}>{u.name}</div><div style={{color:"#888",fontSize:12}}>{u.drink}</div></div><button style={{...S.btnSmall,background:"#1a3a2a",color:"#4caf82",border:"1px solid #4caf82"}}>{L.chatBtn}</button></div>))}
+            {filteredUsers.map(u=>{const st=getStatus(u,L);return(<div key={u.id} style={{...S.nearbyCard,cursor:"pointer"}} onClick={()=>setChatWith(u)}>
+              <div style={{position:"relative",flexShrink:0}}>
+                <span style={{fontSize:28}}>{u.emoji}</span>
+                {st&&<span style={{position:"absolute",bottom:0,right:0,width:10,height:10,borderRadius:"50%",background:st.dot,border:"2px solid #171717"}}/>}
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:14}}>{u.name}</div>
+                <div style={{color:"#888",fontSize:12,display:"flex",alignItems:"center",gap:5}}>
+                  {st?<><span style={{width:6,height:6,borderRadius:"50%",background:st.dot,display:"inline-block",flexShrink:0}}/><span style={{color:st.dot==="#4caf82"?"#4caf82":st.dot==="#f5a623"?"#f5a623":"#888"}}>{st.label}</span></>:<span>{u.drink}</span>}
+                </div>
+              </div>
+              <button style={{...S.btnSmall,background:"#1a3a2a",color:"#4caf82",border:"1px solid #4caf82"}}>{L.chatBtn}</button>
+            </div>);})}
           </div>
         </div>)}
 
