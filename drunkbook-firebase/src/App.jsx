@@ -202,6 +202,10 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick, active }) {
         zoomControl: true,
         attributionControl: false,
         preferCanvas: true,
+        dragging: true,
+        touchZoom: true,
+        scrollWheelZoom: true,
+        doubleClickZoom: true,
       }).setView(center, 13);
       window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19, crossOrigin: true,
@@ -234,7 +238,7 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick, active }) {
     if (!window.L || mapInstanceRef.current || !mapRef.current) return;
     const center = geo ? [geo.lat, geo.lon] : [47.0245, 28.8322];
     const map = window.L.map(mapRef.current, {
-      zoomControl: true, attributionControl: false, preferCanvas: true,
+      zoomControl: true, attributionControl: false, preferCanvas: true, dragging: true, touchZoom: true, scrollWheelZoom: true,
     }).setView(center, 13);
     window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
     mapInstanceRef.current = map;
@@ -321,7 +325,7 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick, active }) {
 
       {/* Map container */}
       {!ready && <div style={{height:420,background:"#171717",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center",color:"#888",fontSize:14}}>🗺️ Se încarcă harta...</div>}
-      <div ref={mapRef} style={{height:420,width:"100%",borderRadius:14,overflow:"hidden",visibility:ready?"visible":"hidden",position:ready?"relative":"absolute",left:ready?0:-9999}}/>
+      <div ref={mapRef} style={{height:420,width:"100%",borderRadius:14,overflow:"hidden",visibility:ready?"visible":"hidden",position:ready?"relative":"absolute",left:ready?0:-9999,cursor:"grab"}}/>
 
       {/* Legend */}
       {ready && <div style={{display:"flex",gap:12,marginTop:10,flexWrap:"wrap"}}>
@@ -345,6 +349,92 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick, active }) {
         ))}
         {allUsers.filter(u=>u.lat&&u.lon).length===0&&<div style={{textAlign:"center",color:"#666",fontSize:14,fontStyle:"italic",marginTop:20}}>Nimeni nu are locația activată încă.</div>}
       </div>
+    </div>
+  );
+}
+
+// ===== MENTION HELPERS =====
+function highlightMentions(text){
+  if(!text)return null;
+  const parts=text.split(/(@\w[\w\s]*?)(?=\s|$|@)/g);
+  return parts.map((part,i)=>
+    part.startsWith("@")
+      ?<span key={i} style={{color:"#f5a623",fontWeight:700}}>{part}</span>
+      :<span key={i}>{part}</span>
+  );
+}
+
+function MentionTextarea({value,onChange,onKeyDown,placeholder,style,inputRef,allUsers,currentUserId,rows}){
+  const [mentionQuery,setMentionQuery]=useState("");
+  const [showMentions,setShowMentions]=useState(false);
+  const [mentionPos,setMentionPos]=useState(0);
+  const ref=useRef(null);
+  const actualRef=inputRef||ref;
+
+  function handleChange(e){
+    const val=e.target.value;
+    const cursor=e.target.selectionStart;
+    // Find @ before cursor
+    const textBefore=val.slice(0,cursor);
+    const match=textBefore.match(/@([\w\s]*)$/);
+    if(match){
+      setMentionQuery(match[1].toLowerCase());
+      setMentionPos(cursor-match[0].length);
+      setShowMentions(true);
+    }else{
+      setShowMentions(false);
+      setMentionQuery("");
+    }
+    onChange(e);
+  }
+
+  function selectUser(user){
+    const before=value.slice(0,mentionPos);
+    const after=value.slice(actualRef.current?.selectionStart||value.length);
+    const newVal=`${before}@${user.name} ${after}`;
+    onChange({target:{value:newVal}});
+    setShowMentions(false);
+    setMentionQuery("");
+    setTimeout(()=>actualRef.current?.focus(),50);
+  }
+
+  const filtered=allUsers
+    .filter(u=>u.id!==currentUserId)
+    .filter(u=>u.name?.toLowerCase().includes(mentionQuery))
+    .slice(0,5);
+
+  const isTextarea=rows&&rows>1;
+  const Tag=isTextarea?"textarea":"input";
+
+  return(
+    <div style={{position:"relative",flex:1}}>
+      <Tag
+        ref={actualRef}
+        value={value}
+        onChange={handleChange}
+        onKeyDown={e=>{
+          if(showMentions&&(e.key==="Escape")){setShowMentions(false);return;}
+          if(onKeyDown)onKeyDown(e);
+        }}
+        onBlur={()=>setTimeout(()=>setShowMentions(false),150)}
+        placeholder={placeholder}
+        style={style}
+        rows={rows}
+      />
+      {showMentions&&filtered.length>0&&(
+        <div style={{position:"absolute",bottom:"100%",left:0,right:0,background:"#1a1a1a",border:"1px solid #f5a623",borderRadius:10,zIndex:200,overflow:"hidden",marginBottom:4,boxShadow:"0 4px 20px rgba(0,0,0,0.5)"}}>
+          {filtered.map(u=>(
+            <div key={u.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid #242424"}}
+              onMouseDown={e=>{e.preventDefault();selectUser(u);}}>
+              <span style={{fontSize:20}}>{u.emoji}</span>
+              <div>
+                <div style={{fontWeight:700,fontSize:13,color:"#f5a623"}}>@{u.name}</div>
+                <div style={{fontSize:11,color:"#888"}}>{u.drink}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -612,6 +702,19 @@ export default function App() {
   function handleImageSelect(e){const file=e.target.files[0];if(!file)return;if(file.size>10*1024*1024){showToast(L.photoTooBig);return;}setPostImage(file);setPostImagePreview(URL.createObjectURL(file));}
   function removeImage(){setPostImage(null);setPostImagePreview(null);if(fileInputRef.current)fileInputRef.current.value="";}
 
+  // Extract mentioned users from text and notify them
+  async function notifyMentions(text, sourceType){
+    if(!text)return;
+    const matches=[...text.matchAll(/@([\w][^\s@]*(?:\s[\w][^\s@]*)*)/g)];
+    for(const match of matches){
+      const mentionedName=match[1].trim().toLowerCase();
+      const mentionedUser=allUsers.find(u=>u.name?.toLowerCase()===mentionedName&&u.id!==authUser.uid);
+      if(mentionedUser){
+        await sendInAppNotification(mentionedUser.id,"mention",`${profile.name} te-a menționat într-${sourceType==="post"?"o postare":"un comentariu"}: "${text.slice(0,60)}${text.length>60?"...":""}"`);
+      }
+    }
+  }
+
   async function submitPost(){
     if(!newPost.trim()&&!postImage)return;
     setUploadingPost(true);
@@ -628,6 +731,7 @@ export default function App() {
         }
       }
       await addDoc(collection(db,"posts"),{userId:authUser.uid,userName:profile.name,userEmoji:profile.emoji,text:newPost,drink:selectedDrink,sector:selectedSector||null,likes:[],commentCount:0,imageUrl,createdAt:serverTimestamp()});
+      notifyMentions(newPost,"post");
       setNewPost("");removeImage();setSelectedSector(null);showToast(L.postPublished);
     }catch(e){showToast("Eroare: "+e.message);}
     setUploadingPost(false);
@@ -933,7 +1037,7 @@ export default function App() {
         {/* FEED */}
         {tab==="feed"&&(<div>
           <div style={S.composer}>
-            <div style={{display:"flex",gap:10,marginBottom:10}}><span style={{fontSize:28}}>{profile?.emoji}</span><textarea style={S.composerInput} placeholder={L.composerPlaceholder} value={newPost} onChange={e=>setNewPost(e.target.value)} rows={2}/></div>
+            <div style={{display:"flex",gap:10,marginBottom:10}}><span style={{fontSize:28}}>{profile?.emoji}</span><MentionTextarea value={newPost} onChange={e=>setNewPost(e.target.value)} placeholder={L.composerPlaceholder} style={S.composerInput} allUsers={allUsers} currentUserId={authUser?.uid} rows={2}/></div>
             {postImagePreview&&(<div style={{position:"relative",marginBottom:10}}><img src={postImagePreview} alt="" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:10}}/><button onClick={removeImage} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.7)",border:"none",color:"#fff",width:28,height:28,borderRadius:"50%",cursor:"pointer",fontSize:14}}>✕</button></div>)}
 
             {/* Sector selector */}
@@ -977,7 +1081,7 @@ export default function App() {
                 {post.userId!==authUser.uid&&<button style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:"4px 8px"}} onClick={()=>{const u=allUsers.find(u=>u.id===post.userId);if(u)openChat(u);}}>💬</button>}
                 {post.userId===authUser.uid&&<button style={{background:"none",border:"none",cursor:"pointer",fontSize:16,padding:"4px 8px",color:"#666"}} onClick={()=>setConfirmDelete(post.id)}>🗑️</button>}
               </div>
-              {post.text&&<div style={{fontSize:15,lineHeight:1.6,color:"#ddd",marginBottom:post.imageUrl?10:12}}>{post.text}</div>}
+              {post.text&&<div style={{fontSize:15,lineHeight:1.6,color:"#ddd",marginBottom:post.imageUrl?10:12}}>{highlightMentions(post.text)}</div>}
               {post.imageUrl&&(<div style={{marginBottom:12,cursor:"pointer"}} onClick={()=>setLightboxImg(post.imageUrl)}><img src={post.imageUrl} alt="" style={{width:"100%",maxHeight:300,objectFit:"cover",borderRadius:10}}/></div>)}
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
                 <button style={S.likeBtn} onClick={()=>toggleLike(post.id,post.likes||[])}>🍻 {(post.likes||[]).length}{(post.likes||[]).includes(authUser.uid)?" · cheers!":""}</button>
@@ -990,7 +1094,7 @@ export default function App() {
                     <span style={{fontSize:20,flexShrink:0}}>{c.userEmoji}</span>
                     <div style={{background:"#1e1e1e",borderRadius:"4px 12px 12px 12px",padding:"8px 12px",flex:1}}>
                       <div style={{fontWeight:700,fontSize:12,color:"#f5a623",marginBottom:3}}>{c.userName} <span style={{color:"#555",fontWeight:400}}>· {timeAgo(c.createdAt,L)}</span></div>
-                      {c.text&&<div style={{fontSize:14,color:"#ddd",lineHeight:1.5}}>{c.text}</div>}
+                      {c.text&&<div style={{fontSize:14,color:"#ddd",lineHeight:1.5}}>{highlightMentions(c.text)}</div>}
                       {c.imageUrl&&<img src={c.imageUrl} alt="" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:8,marginTop:6,cursor:"pointer"}} onClick={()=>setLightboxImg(c.imageUrl)}/>}
                     </div>
                   </div>))}
@@ -1004,7 +1108,7 @@ export default function App() {
                   )}
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
                     <span style={{fontSize:22,flexShrink:0}}>{profile?.emoji}</span>
-                    <input ref={commentInputRef} style={{...S.input,flex:1,padding:"8px 12px",fontSize:14}} placeholder={L.addComment} value={newComment} onChange={e=>setNewComment(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submitComment(post.id);}}}/>
+                    <MentionTextarea value={newComment} onChange={e=>setNewComment(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submitComment(post.id);}}} placeholder={L.addComment} style={{...S.input,padding:"8px 12px",fontSize:14}} inputRef={commentInputRef} allUsers={allUsers} currentUserId={authUser?.uid}/>
                     <button style={{...S.drinkBtn,color:"#f5a623",borderColor:"#f5a623",fontSize:16,padding:"6px 8px"}} onClick={()=>commentFileInputRef.current?.click()}>📸</button>
                     <input ref={commentFileInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const file=e.target.files[0];if(!file)return;if(file.size>10*1024*1024){showToast(L.photoTooBig);return;}setCommentImage(file);setCommentImagePreview(URL.createObjectURL(file));}}/>
                     <button style={{...S.postBtn,padding:"8px 12px",fontSize:16,opacity:uploadingComment?0.6:1}} onClick={()=>submitComment(post.id)} disabled={uploadingComment}>{uploadingComment?"⏳":"→"}</button>
