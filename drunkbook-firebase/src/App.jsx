@@ -189,41 +189,158 @@ function LiveMap({ allUsers, currentUser, geo, onUserClick, active }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef({});
-  const [leafletLoaded, setLeafletLoaded] = useState(false);
+  const [ready, setReady] = useState(false);
   const [checkinName, setCheckinName] = useState("");
   const [showCheckin, setShowCheckin] = useState(false);
 
+  // Load Leaflet scripts
   useEffect(() => {
+    function initMap() {
+      if (mapInstanceRef.current || !mapRef.current) return;
+      const center = geo ? [geo.lat, geo.lon] : [47.0245, 28.8322];
+      const map = window.L.map(mapRef.current, {
+        zoomControl: true,
+        attributionControl: false,
+        preferCanvas: true,
+      }).setView(center, 13);
+      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, crossOrigin: true,
+      }).addTo(map);
+      mapInstanceRef.current = map;
+      setTimeout(() => { map.invalidateSize(); setReady(true); }, 300);
+    }
+
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
       link.id = 'leaflet-css'; link.rel = 'stylesheet';
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
-    if (!window.L) {
+    if (window.L) {
+      initMap();
+    } else if (!document.getElementById('leaflet-js')) {
       const script = document.createElement('script');
+      script.id = 'leaflet-js';
       script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.onload = () => setLeafletLoaded(true);
+      script.onload = () => initMap();
       document.head.appendChild(script);
-    } else { setLeafletLoaded(true); }
+    }
   }, []);
 
-  // Fix black map - invalidate size after mount
+  // Re-init if mapRef is available after script loads
   useEffect(() => {
-    if (!mapInstanceRef.current) return;
-    setTimeout(() => mapInstanceRef.current?.invalidateSize(), 200);
-    setTimeout(() => mapInstanceRef.current?.invalidateSize(), 600);
-  }, [active, leafletLoaded]);
-
-  useEffect(() => {
-    if (!leafletLoaded || !mapRef.current || mapInstanceRef.current) return;
-    const center = geo ? [geo.lat, geo.lon] : [47.0245, 28.8322]; // Chișinău default
-    const map = window.L.map(mapRef.current, { zoomControl: true, attributionControl: false }).setView(center, 13);
+    if (!window.L || mapInstanceRef.current || !mapRef.current) return;
+    const center = geo ? [geo.lat, geo.lon] : [47.0245, 28.8322];
+    const map = window.L.map(mapRef.current, {
+      zoomControl: true, attributionControl: false, preferCanvas: true,
+    }).setView(center, 13);
     window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
     mapInstanceRef.current = map;
-    // Invalidate after mount too
-    setTimeout(() => map.invalidateSize(), 300);
-  }, [leafletLoaded]);
+    setTimeout(() => { map.invalidateSize(); setReady(true); }, 300);
+  }, [ready]);
+
+  // Invalidate when tab becomes active
+  useEffect(() => {
+    if (!active || !mapInstanceRef.current) return;
+    setTimeout(() => mapInstanceRef.current?.invalidateSize(), 50);
+    setTimeout(() => mapInstanceRef.current?.invalidateSize(), 400);
+  }, [active]);
+
+  // Update markers
+  useEffect(() => {
+    if (!mapInstanceRef.current || !window.L || !ready) return;
+    const map = mapInstanceRef.current;
+    const twoHoursAgo = Date.now() - 2*3600*1000;
+    Object.values(markersRef.current).forEach(m => map.removeLayer(m));
+    markersRef.current = {};
+    allUsers.filter(u => u.lat && u.lon).forEach(u => {
+      const isActive = u.lastSeen?.seconds ? (u.lastSeen.seconds*1000 > twoHoursAgo) : false;
+      const isMe = u.id === currentUser?.uid;
+      const size = isMe ? 44 : isActive ? 38 : 32;
+      const checkedIn = u.checkinName ? `<br/><span style="font-size:10px;color:#f5a623">📍 ${u.checkinName}</span>` : '';
+      const icon = window.L.divIcon({
+        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${isMe?'#f5a623':isActive?'#2a2a2a':'#1a1a1a'};border:${isMe?'3px solid #fff':isActive?'2px solid #f5a623':'2px solid #444'};display:flex;align-items:center;justify-content:center;font-size:${isMe?22:isActive?18:16}px;box-shadow:${isMe?'0 0 12px rgba(245,166,35,0.8)':isActive?'0 0 8px rgba(245,166,35,0.4)':'none'};cursor:pointer;">${u.emoji}</div>`,
+        className:'', iconSize:[size,size], iconAnchor:[size/2,size/2],
+      });
+      const marker = window.L.marker([u.lat, u.lon], { icon }).addTo(map)
+        .bindPopup(`<div style="font-family:Georgia,serif;text-align:center;min-width:120px"><div style="font-size:28px">${u.emoji}</div><div style="font-weight:700;color:#f5a623;font-size:14px">${u.name}</div><div style="color:#888;font-size:11px">${u.drink}</div>${checkedIn}<div style="color:#aaa;font-size:10px;margin-top:4px">${isActive?'🟢 Activ':'⚫ Inactiv'}</div>${!isMe?`<button onclick="window._dbUserClick('${u.id}')" style="margin-top:8px;background:#f5a623;border:none;border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer;">Vezi Profil</button>`:''}</div>`);
+      marker.on('click', () => { if (!isMe) onUserClick(u); });
+      markersRef.current[u.id] = marker;
+    });
+    window._dbUserClick = (userId) => { const user = allUsers.find(u => u.id === userId); if (user) onUserClick(user); };
+  }, [allUsers, currentUser, ready]);
+
+  // Center on user location
+  useEffect(() => {
+    if (geo && mapInstanceRef.current) {
+      mapInstanceRef.current.setView([geo.lat, geo.lon], 14);
+      setTimeout(() => mapInstanceRef.current?.invalidateSize(), 100);
+    }
+  }, [geo]);
+
+  async function handleCheckin() {
+    if (!checkinName.trim() || !currentUser) return;
+    await updateDoc(doc(db, "users", currentUser.uid), { checkinName, checkinTime: serverTimestamp(), lastSeen: serverTimestamp() });
+    setCheckinName(""); setShowCheckin(false);
+  }
+  async function handleCheckout() {
+    if (!currentUser) return;
+    await updateDoc(doc(db, "users", currentUser.uid), { checkinName: null, checkinTime: null });
+  }
+
+  const myUser = allUsers.find(u => u.id === currentUser?.uid);
+  const iS = {width:"100%",boxSizing:"border-box",background:"#1a1a1a",border:"1px solid #333",borderRadius:10,padding:"10px 14px",color:"#e8e0d0",fontSize:15,fontFamily:"Georgia,serif",outline:"none"};
+
+  return (
+    <div>
+      {/* Check-in bar */}
+      <div style={{background:"#171717",border:"1px solid #242424",borderRadius:14,padding:12,marginBottom:12}}>
+        {myUser?.checkinName ? (
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:20}}>📍</span>
+            <div style={{flex:1}}><div style={{color:"#f5a623",fontWeight:700,fontSize:14}}>Check-in: {myUser.checkinName}</div><div style={{color:"#888",fontSize:12}}>Ești vizibil pe hartă</div></div>
+            <button style={{background:"#e87070",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif"}} onClick={handleCheckout}>Check-out</button>
+          </div>
+        ) : showCheckin ? (
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <input style={{...iS,flex:1,padding:"8px 12px"}} placeholder="Numele barului..." value={checkinName} onChange={e=>setCheckinName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleCheckin()} autoFocus/>
+            <button style={{background:"#f5a623",border:"none",borderRadius:8,padding:"8px 14px",color:"#111",fontWeight:700,cursor:"pointer"}} onClick={handleCheckin}>✓</button>
+            <button style={{background:"#2a2a2a",border:"none",borderRadius:8,padding:"8px 10px",color:"#888",cursor:"pointer"}} onClick={()=>setShowCheckin(false)}>✕</button>
+          </div>
+        ) : (
+          <button style={{background:"none",border:"1px dashed #444",borderRadius:10,padding:"10px",width:"100%",color:"#888",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>setShowCheckin(true)}>📍 Check-in la un bar</button>
+        )}
+      </div>
+
+      {/* Map container */}
+      {!ready && <div style={{height:420,background:"#171717",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center",color:"#888",fontSize:14}}>🗺️ Se încarcă harta...</div>}
+      <div ref={mapRef} style={{height:420,borderRadius:14,overflow:"hidden",visibility:ready?"visible":"hidden",position:ready?"relative":"absolute"}}/>
+
+      {/* Legend */}
+      {ready && <div style={{display:"flex",gap:12,marginTop:10,flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,color:"#888",fontSize:12}}><div style={{width:12,height:12,borderRadius:"50%",background:"#f5a623",border:"2px solid #fff"}}/> Tu</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,color:"#888",fontSize:12}}><div style={{width:12,height:12,borderRadius:"50%",background:"#2a2a2a",border:"2px solid #f5a623"}}/> Activ</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,color:"#888",fontSize:12}}><div style={{width:12,height:12,borderRadius:"50%",background:"#1a1a1a",border:"2px solid #444"}}/> Inactiv</div>
+      </div>}
+
+      {/* Users list */}
+      <div style={{marginTop:16}}>
+        <div style={{color:"#f5a623",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Pe Hartă ({allUsers.filter(u=>u.lat&&u.lon).length})</div>
+        {allUsers.filter(u=>u.lat&&u.lon).map(u=>(
+          <div key={u.id} style={{background:"#171717",border:"1px solid #242424",borderRadius:12,padding:10,marginBottom:8,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>onUserClick(u)}>
+            <span style={{fontSize:24}}>{u.emoji}</span>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:14,color:u.id===currentUser?.uid?"#f5a623":"#e8e0d0"}}>{u.name} {u.id===currentUser?.uid&&"(tu)"}</div>
+              {u.checkinName?<div style={{color:"#f5a623",fontSize:12}}>📍 {u.checkinName}</div>:<div style={{color:"#666",fontSize:12}}>Locație activă</div>}
+            </div>
+            {u.id!==currentUser?.uid&&<div style={{width:8,height:8,borderRadius:"50%",background:u.lastSeen?.seconds&&(Date.now()-u.lastSeen.seconds*1000)<7200000?"#4caf82":"#555"}}/>}
+          </div>
+        ))}
+        {allUsers.filter(u=>u.lat&&u.lon).length===0&&<div style={{textAlign:"center",color:"#666",fontSize:14,fontStyle:"italic",marginTop:20}}>Nimeni nu are locația activată încă.</div>}
+      </div>
+    </div>
+  );
+}
 
   useEffect(() => {
     if (!mapInstanceRef.current || !window.L) return;
