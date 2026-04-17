@@ -75,10 +75,9 @@ async function uploadToImgbb(file){
     const r=await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`,{method:'POST',body:fd});
     const d=await r.json();
     if(d.success)return d.data.url;
-    console.error('Imgbb error:',d);
     throw new Error(d.error?.message||'Upload failed');
   }catch(e){
-    console.error('Upload exception:',e);
+    console.error('Upload error:',e);
     throw e;
   }
 }
