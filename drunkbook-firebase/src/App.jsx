@@ -437,8 +437,9 @@ export default function App() {
     }
   }
 
+  function showToast(msg){setToast(msg);setTimeout(()=>setToast(null),2800);}
+
   async function handleAuth(){
-    setAuthError("");
     try{
       let user;
       if(authMode==="register"){const cred=await createUserWithEmailAndPassword(auth,email,password);user=cred.user;}
